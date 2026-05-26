@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Simando Law — Sign In</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,600&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&display=swap" rel="stylesheet"/>
+<script type="module" src="js/firebase-init.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --navy:        #0a1520;
+    --gold:        #c9a55c;
+    --gold-light:  #e0c080;
+    --gold-border: rgba(201,165,92,0.28);
+    --bg:          #060c13;
+    --surface:     #0c1826;
+    --surface2:    #091422;
+    --border:      #162033;
+    --text:        #d8e4f0;
+    --text-muted:  #6b82a0;
+    --text-dim:    #344556;
+    --red:         #f87171;
+    --font-display:'Cormorant Garamond', Georgia, serif;
+    --font-body:   'DM Sans', system-ui, sans-serif;
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 14px;
+  }
+
+  /* Ambient background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 70% 50% at 50% 0%, rgba(201,165,92,0.06) 0%, transparent 60%),
+      radial-gradient(ellipse 40% 60% at 80% 80%, rgba(99,102,241,0.04) 0%, transparent 50%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .page {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    position: relative;
+    z-index: 1;
+  }
+
+  .card {
+    width: 100%;
+    max-width: 420px;
+    background: var(--surface);
+    border: 1px solid var(--gold-border);
+    border-radius: 20px;
+    padding: 44px 40px 40px;
+    box-shadow: 0 24px 80px rgba(0,0,0,0.7), 0 0 60px rgba(201,165,92,0.05);
+  }
+
+  /* Logo */
+  .logo-wrap {
+    text-align: center;
+    margin-bottom: 32px;
+  }
+  .logo-wrap svg { width: 52px; height: 52px; margin-bottom: 12px; }
+  .logo-name {
+    font-family: var(--font-display);
+    font-size: 28px;
+    font-weight: 700;
+    color: #f2ede4;
+    letter-spacing: 1px;
+  }
+  .logo-name span { color: var(--gold); }
+  .logo-sub {
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    margin-top: 4px;
+  }
+
+  /* Divider */
+  .divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 24px 0;
+  }
+
+  /* Form */
+  .field + .field { margin-top: 16px; }
+  .field-label {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 7px;
+  }
+  .field-input {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 14px;
+    padding: 11px 14px;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .field-input:focus {
+    border-color: var(--gold-border);
+    box-shadow: 0 0 0 3px rgba(201,165,92,0.1);
+  }
+  .field-input.err { border-color: var(--red); }
+  .field-input::placeholder { color: var(--text-dim); }
+
+  /* Password toggle wrapper */
+  .pw-wrap { position: relative; }
+  .pw-wrap .field-input { padding-right: 44px; }
+  .pw-toggle {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-muted);
+    font-size: 16px;
+    padding: 4px;
+    line-height: 1;
+    transition: color 0.2s;
+  }
+  .pw-toggle:hover { color: var(--gold); }
+
+  .err-msg {
+    font-size: 12px;
+    color: var(--red);
+    margin-top: 6px;
+    display: none;
+  }
+  .err-msg.show { display: block; }
+
+  /* Button */
+  .btn-login {
+    margin-top: 24px;
+    width: 100%;
+    padding: 13px;
+    background: linear-gradient(135deg, #c9a55c 0%, #b8903d 100%);
+    border: none;
+    border-radius: 10px;
+    color: #0a1520;
+    font-family: var(--font-body);
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.1s;
+    position: relative;
+    overflow: hidden;
+  }
+  .btn-login:hover { opacity: 0.92; }
+  .btn-login:active { transform: scale(0.99); }
+  .btn-login:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .btn-login .spinner {
+    display: none;
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(10,21,32,0.3);
+    border-top-color: #0a1520;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    margin: 0 auto;
+  }
+  .btn-login.loading .btn-text { display: none; }
+  .btn-login.loading .spinner { display: block; }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .restricted-note {
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-top: 20px;
+    line-height: 1.6;
+  }
+  .restricted-note strong { color: var(--text-muted); }
+
+  /* Alert banner */
+  .alert {
+    display: none;
+    padding: 11px 14px;
+    border-radius: 10px;
+    font-size: 13px;
+    margin-bottom: 18px;
+    border: 1px solid transparent;
+  }
+  .alert.error { display: block; background: rgba(248,113,113,0.1); border-color: rgba(248,113,113,0.3); color: #fca5a5; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="card">
+
+    <!-- Logo -->
+    <div class="logo-wrap">
+      <svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
+        <rect x="60" y="40" width="280" height="340" rx="12" fill="none" stroke="#c9a84c" stroke-width="8"/>
+        <line x1="200" y1="60" x2="200" y2="360" stroke="#c9a84c" stroke-width="6"/>
+        <circle cx="120" cy="160" r="44" fill="none" stroke="#c9a84c" stroke-width="7"/>
+        <circle cx="280" cy="160" r="44" fill="none" stroke="#c9a84c" stroke-width="7"/>
+        <line x1="120" y1="204" x2="120" y2="270" stroke="#c9a84c" stroke-width="6"/>
+        <line x1="280" y1="204" x2="280" y2="270" stroke="#c9a84c" stroke-width="6"/>
+        <polygon points="200,265 120,340 280,340" fill="#c9a84c" opacity="0.45"/>
+      </svg>
+      <div class="logo-name">SIMANDO <span>LAW</span></div>
+      <div class="logo-sub">Case Management System</div>
+    </div>
+
+    <hr class="divider"/>
+
+    <!-- Error alert -->
+    <div class="alert" id="login-alert"></div>
+
+    <!-- Form -->
+    <div class="field">
+      <label class="field-label" for="login-email">Email Address</label>
+      <input class="field-input" id="login-email" type="email" placeholder="you@simandolaw.com" autocomplete="email"/>
+    </div>
+    <div class="field">
+      <label class="field-label" for="login-pw">Password</label>
+      <div class="pw-wrap">
+        <input class="field-input" id="login-pw" type="password" placeholder="••••••••" autocomplete="current-password"
+          onkeydown="if(event.key==='Enter') submitLogin()"/>
+        <button class="pw-toggle" type="button" onclick="togglePw()" title="Show / hide password" id="pw-eye">👁</button>
+      </div>
+    </div>
+
+    <button class="btn-login" id="login-btn" onclick="submitLogin()">
+      <span class="btn-text">Sign In</span>
+      <div class="spinner"></div>
+    </button>
+
+    <p class="restricted-note">
+      <strong>Restricted access.</strong><br>
+      This system is for authorised Simando Law staff only.<br>
+      Contact your administrator if you need access.
+    </p>
+
+  </div>
+</div>
+
+<script src="js/config.js"></script>
+<script>
+  // If already logged in, go straight to the app
+  document.addEventListener("firebase-ready", () => {
+    if (!window._auth || !window._fbOnAuth) return;
+    window._fbOnAuth(window._auth, user => {
+      if (user) window.location.replace("index.html");
+    });
+  });
+
+  function togglePw() {
+    const inp = document.getElementById("login-pw");
+    const eye = document.getElementById("pw-eye");
+    if (inp.type === "password") { inp.type = "text"; eye.textContent = "🙈"; }
+    else { inp.type = "password"; eye.textContent = "👁"; }
+  }
+
+  function showAlert(msg) {
+    const el = document.getElementById("login-alert");
+    el.textContent = msg;
+    el.className = "alert error";
+  }
+  function clearAlert() {
+    const el = document.getElementById("login-alert");
+    el.className = "alert";
+  }
+
+  async function submitLogin() {
+    const email = document.getElementById("login-email").value.trim();
+    const pw    = document.getElementById("login-pw").value;
+    const btn   = document.getElementById("login-btn");
+
+    clearAlert();
+    if (!email) { showAlert("Please enter your email address."); return; }
+    if (!pw)    { showAlert("Please enter your password."); return; }
+
+    if (!window._fbSignIn || !window._auth) {
+      showAlert("Authentication service unavailable. Please refresh and try again.");
+      return;
+    }
+
+    btn.classList.add("loading");
+    btn.disabled = true;
+    try {
+      await window._fbSignIn(window._auth, email, pw);
+      // onAuthStateChanged will fire and redirect, but also redirect here just in case
+      window.location.replace("index.html");
+    } catch(err) {
+      btn.classList.remove("loading");
+      btn.disabled = false;
+      const code = err.code || "";
+      if (code === "auth/user-not-found" || code === "auth/wrong-password" || code === "auth/invalid-credential") {
+        showAlert("Incorrect email or password. Please try again.");
+      } else if (code === "auth/user-disabled") {
+        showAlert("This account has been disabled. Contact your administrator.");
+      } else if (code === "auth/too-many-requests") {
+        showAlert("Too many failed attempts. Please wait a moment before trying again.");
+      } else {
+        showAlert("Sign-in failed: " + (err.message || "Unknown error"));
+      }
+    }
+  }
+</script>
+</body>
+</html>

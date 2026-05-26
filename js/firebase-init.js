@@ -1,5 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getFirestore, collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, orderBy, onSnapshot, limit, serverTimestamp, where, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword, updateProfile, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDIDs21G2wWy-Wd72wb-iWNMCTy0_KlADo",
@@ -14,7 +15,12 @@ const firebaseConfig = {
 try {
   const app = initializeApp(firebaseConfig);
   const db  = getFirestore(app);
+  const auth = getAuth(app);
+
   window._db = db;
+  window._auth = auth;
+
+  // Firestore
   window._fbCol    = collection;
   window._fbAddDoc = addDoc;
   window._fbGetDocs= getDocs;
@@ -28,6 +34,15 @@ try {
   window._fbServerTs    = serverTimestamp;
   window._fbWhere       = where;
   window._fbSet         = setDoc;
+
+  // Auth
+  window._fbSignIn     = signInWithEmailAndPassword;
+  window._fbSignOut    = signOut;
+  window._fbOnAuth     = onAuthStateChanged;
+  window._fbCreateUser = createUserWithEmailAndPassword;
+  window._fbUpdateProfile = updateProfile;
+  window._fbResetPassword = sendPasswordResetEmail;
+
   window._fbReady  = true;
   document.dispatchEvent(new Event("firebase-ready"));
 } catch (err) {

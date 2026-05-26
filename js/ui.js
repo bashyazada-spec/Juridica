@@ -35,7 +35,7 @@ function showView(name) {
   if (el) el.classList.remove("hidden");
   currentView = name;
   document.querySelectorAll(".nav-btn").forEach(b=>b.classList.remove("active"));
-  if (["dashboard","profiles","allcases"].includes(name)) {
+  if (["dashboard","profiles","allcases","profile"].includes(name)) {
     const btn = document.querySelector(`.nav-btn[data-nav="${name}"]`);
     if (btn) btn.classList.add("active");
   }
@@ -57,6 +57,7 @@ function navTo(view) {
   if (view==="dashboard") renderDashboard();
   if (view==="profiles")  renderProfiles();
   if (view==="allcases")  renderAllCases();
+  if (view==="profile")   renderUserProfile();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -175,9 +176,16 @@ function renderDashProfiles() {
 // ═══════════════════════════════════════════════════════════════
 function renderProfiles() {
   document.getElementById("profiles-count").textContent = `${profiles.length} profile${profiles.length!==1?"s":""} total`;
+
+  // Show/hide New Attorney button - only show when no profiles exist
+  const newBtn = document.getElementById("new-attorney-btn");
+  if (newBtn) {
+    newBtn.style.display = profiles.length === 0 ? "inline-flex" : "none";
+  }
+
   const el = document.getElementById("profiles-grid");
   if (profiles.length===0) {
-    el.innerHTML='<div class="empty-state" style="grid-column:1/-1"><div class="empty-state-icon">👤</div><div style="font-size:16px;margin-bottom:8px">No profiles yet</div><div style="font-size:13px">Add your first attorney profile to get started.</div></div>';
+    el.innerHTML='<div class="empty-state" style="grid-column:1/-1"><div class="empty-state-icon">👤</div><div style="font-size:16px;margin-bottom:8px">No profiles yet</div><div style="font-size:13px">Click "New Attorney" to add your first profile.</div></div>';
     return;
   }
   el.innerHTML = profiles.map(p=>{
