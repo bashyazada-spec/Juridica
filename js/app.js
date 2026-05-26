@@ -120,6 +120,167 @@ async function executeDelete() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+//  USER PROFILE / ACCOUNT PAGE
+// ═══════════════════════════════════════════════════════════════
+
+function renderUserProfile() {
+  const user = window._currentUser || (window._auth && window._auth.currentUser);
+  if (!user) return;
+
+  document.getElementById("up-name").value = user.displayName || "";
+  document.getElementById("up-email").value = user.email || "";
+
+  // Clear any previous messages
+  document.getElementById("up-msg").textContent = "";
+  document.getElementById("up-msg").className = "form-msg";
+  document.getElementById("up-pw-msg").textContent = "";
+  document.getElementById("up-pw-msg").className = "form-msg";
+  clearUserProfileErrors();
+}
+
+function clearUserProfileErrors() {
+  ["up-old-pw-err", "up-new-pw-err", "up-confirm-pw-err"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.add("hidden");
+  });
+  ["up-old-pw", "up-new-pw", "up-confirm-pw"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove("err");
+  });
+}
+
+async function saveUserProfile() {
+  const name = document.getElementById("up-name").value.trim();
+  const msgEl = document.getElementById("up-msg");
+  const btn = document.getElementById("up-save-btn");
+
+  if (!name) {
+    msgEl.textContent = "Name cannot be empty";
+    msgEl.className = "form-msg error";
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = "Updating...";
+
+  try {
+    const user = window._auth.currentUser;
+    if (!user) throw new Error("Not signed in");
+
+    // Update Firebase Auth profile
+    await window._fbUpdateProfile(user, { displayName: name });
+
+    // Update sidebar display
+    const nameEl = document.getElementById("auth-user-display");
+    const avatarEl = document.getElementById("auth-avatar");
+    if (nameEl) nameEl.textContent = name;
+    if (avatarEl) avatarEl.textContent = name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase() || "U";
+
+    // Update current user reference
+    window._currentUser = user;
+
+    msgEl.textContent = "✓ Profile updated";
+    msgEl.className = "form-msg success";
+    showToast("Profile updated successfully");
+  } catch (err) {
+    console.error("saveUserProfile error:", err);
+    msgEl.textContent = "Failed: " + (err.message || "Unknown error");
+    msgEl.className = "form-msg error";
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Update Profile";
+  }
+}
+
+function togglePwField(inputId, btn) {
+  const input = document.getElementById(inputId);
+  if (input.type === "password") {
+    input.type = "text";
+    btn.textContent = "🙈";
+  } else {
+    input.type = "password";
+    btn.textContent = "👁";
+  }
+}
+
+async function changeUserPassword() {
+  const oldPw = document.getElementById("up-old-pw").value;
+  const newPw = document.getElementById("up-new-pw").value;
+  const confirmPw = document.getElementById("up-confirm-pw").value;
+  const msgEl = document.getElementById("up-pw-msg");
+  const btn = document.getElementById("up-pw-btn");
+
+  clearUserProfileErrors();
+
+  let valid = true;
+  if (!oldPw) {
+    document.getElementById("up-old-pw-err").classList.remove("hidden");
+    document.getElementById("up-old-pw").classList.add("err");
+    valid = false;
+  }
+  if (!newPw || newPw.length < 8) {
+    document.getElementById("up-new-pw-err").classList.remove("hidden");
+    document.getElementById("up-new-pw").classList.add("err");
+    valid = false;
+  }
+  if (newPw !== confirmPw) {
+    document.getElementById("up-confirm-pw-err").classList.remove("hidden");
+    document.getElementById("up-confirm-pw").classList.add("err");
+    valid = false;
+  }
+  if (!valid) return;
+
+  btn.disabled = true;
+  btn.textContent = "Changing...";
+
+  try {
+    const user = window._auth.currentUser;
+    if (!user || !user.email) throw new Error("Not signed in");
+
+    // Import EmailAuthProvider for reauthentication
+    const { EmailAuthProvider, reauthenticateWithCredential, updatePassword } = await import(
+      "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js"
+    );
+
+    // Reauthenticate with old password
+    const credential = EmailAuthProvider.credential(user.email, oldPw);
+    await reauthenticateWithCredential(user, credential);
+
+    // Change password
+    await updatePassword(user, newPw);
+
+    // Clear fields
+    document.getElementById("up-old-pw").value = "";
+    document.getElementById("up-new-pw").value = "";
+    document.getElementById("up-confirm-pw").value = "";
+
+    msgEl.textContent = "✓ Password changed successfully";
+    msgEl.className = "form-msg success";
+    showToast("Password changed successfully");
+  } catch (err) {
+    console.error("changeUserPassword error:", err);
+    let errMsg = "Failed to change password";
+    const code = err.code || "";
+    if (code === "auth/wrong-password" || code === "auth/invalid-credential") {
+      errMsg = "Current password is incorrect";
+      document.getElementById("up-old-pw").classList.add("err");
+    } else if (code === "auth/weak-password") {
+      errMsg = "New password is too weak";
+      document.getElementById("up-new-pw").classList.add("err");
+    } else if (code === "auth/requires-recent-login") {
+      errMsg = "Please sign out and sign back in, then try again";
+    } else {
+      errMsg = err.message || errMsg;
+    }
+    msgEl.textContent = errMsg;
+    msgEl.className = "form-msg error";
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Change Password";
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
 //  PROFILE FORM — DRIVE AUTH REQUIRED
 // ═══════════════════════════════════════════════════════════════
 let pfDriveConnected = false;
@@ -908,7 +1069,7 @@ async function connectDriveForOnboarding() {
   const btn = document.getElementById("onb-drive-btn");
   const statusEl = document.getElementById("onb-drive-status");
   const errorEl = document.getElementById("onb-drive-err");
-  
+
   btn.disabled = true;
   btn.textContent = "Connecting...";
   errorEl.classList.add("hidden");
@@ -918,7 +1079,7 @@ async function connectDriveForOnboarding() {
     await waitForGoogleDriveReady();
     // Prompt for Drive auth
     await promptDriveAuth();
-    
+
     // Success!
     onbDriveConnected = true;
     statusEl.className = "drive-status-chip connected";
@@ -926,7 +1087,7 @@ async function connectDriveForOnboarding() {
     btn.textContent = "✓ Google Drive Connected";
     btn.disabled = true;
     btn.style.opacity = "0.7";
-    
+
   } catch(e) {
     console.error("Drive connection failed:", e);
     onbDriveConnected = false;
@@ -953,14 +1114,14 @@ function showOnboardError(fieldId, msg) {
 
 async function completeOnboarding() {
   clearOnboardErrors();
-  
+
   const name = document.getElementById("onb-name").value.trim();
   const role = document.getElementById("onb-role").value.trim();
   const email = document.getElementById("onb-email").value.trim();
   const contact = document.getElementById("onb-contact").value.trim();
-  
+
   let valid = true;
-  
+
   if (!name) {
     showOnboardError("onb-name-err", "Attorney name is required");
     valid = false;
@@ -969,17 +1130,14 @@ async function completeOnboarding() {
     showOnboardError("onb-role-err", "Specialization/role is required");
     valid = false;
   }
-  if (!onbDriveConnected) {
-    showOnboardError("onb-drive-err", "You must connect Google Drive to continue");
-    valid = false;
-  }
-  
+  // Drive is now OPTIONAL — removed the required check
+
   if (!valid) return;
-  
+
   const btn = document.getElementById("onb-complete-btn");
   btn.disabled = true;
   btn.textContent = "Creating...";
-  
+
   try {
     // Create the profile
     const profileData = {
@@ -992,17 +1150,17 @@ async function completeOnboarding() {
       ownerUid: window._currentUser?.uid,
       driveFolderId: window._driveRootFolderId || null
     };
-    
+
     await dbAddProfile(profileData);
-    
+
     // Close the modal
     closeOnboardingModal();
-    
+
     // Navigate to profiles view
     showToast("Profile created successfully!", "success");
     navTo("profiles");
     renderProfiles();
-    
+
   } catch(e) {
     console.error("Error creating profile:", e);
     btn.disabled = false;
@@ -1026,7 +1184,7 @@ function logoutOnboardCancel() {
 // Check and show onboarding modal after app loads
 async function showOnboardingIfNeeded() {
   if (!window._db || !window._currentUser) return;
-  
+
   try {
     const needsOnboarding = await checkNeedsOnboarding();
     if (needsOnboarding) {
@@ -1037,7 +1195,7 @@ async function showOnboardingIfNeeded() {
       document.getElementById("onb-contact").value = "";
       onbColor = AVATAR_COLORS[0];
       onbDriveConnected = false;
-      
+
       // Reset drive status
       const statusEl = document.getElementById("onb-drive-status");
       const btn = document.getElementById("onb-drive-btn");
@@ -1046,10 +1204,10 @@ async function showOnboardingIfNeeded() {
       btn.disabled = false;
       btn.textContent = "Connect Google Drive";
       btn.style.opacity = "1";
-      
+
       // Select first color as default
       selectOnboardColor(AVATAR_COLORS[0]);
-      
+
       // Show the modal
       const modal = document.getElementById("onboarding-modal");
       if (modal) modal.classList.remove("hidden");

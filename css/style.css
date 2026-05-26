@@ -499,6 +499,22 @@ select.field-input {
 
 .field-err { color: var(--red); font-size: 11px; margin-top: 5px; font-weight: 500; }
 
+/* ── PASSWORD WRAPPER (for profile page) ── */
+.pw-wrap { position: relative; }
+.pw-wrap .field-input { padding-right: 44px; }
+.pw-eye {
+  position: absolute; right: 11px; top: 50%; transform: translateY(-50%);
+  background: none; border: none; cursor: pointer; color: var(--text-muted);
+  font-size: 15px; padding: 3px; transition: color 0.2s;
+}
+.pw-eye:hover { color: var(--gold); }
+
+/* ── FORM ACTIONS ── */
+.form-actions { display: flex; gap: 10px; margin-top: 20px; align-items: center; }
+.form-msg { font-size: 13px; margin-left: 4px; }
+.form-msg.success { color: var(--green); }
+.form-msg.error   { color: var(--red); }
+
 /* ── BUTTONS ── */
 .btn {
   padding: 9px 20px; border-radius: 9px; border: none;

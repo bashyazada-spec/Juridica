@@ -35,7 +35,7 @@ function showView(name) {
   if (el) el.classList.remove("hidden");
   currentView = name;
   document.querySelectorAll(".nav-btn").forEach(b=>b.classList.remove("active"));
-  if (["dashboard","profiles","allcases"].includes(name)) {
+  if (["dashboard","profiles","allcases","profile"].includes(name)) {
     const btn = document.querySelector(`.nav-btn[data-nav="${name}"]`);
     if (btn) btn.classList.add("active");
   }
@@ -57,6 +57,7 @@ function navTo(view) {
   if (view==="dashboard") renderDashboard();
   if (view==="profiles")  renderProfiles();
   if (view==="allcases")  renderAllCases();
+  if (view==="profile")   renderUserProfile();
 }
 
 // ═══════════════════════════════════════════════════════════════
