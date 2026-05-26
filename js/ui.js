@@ -35,7 +35,7 @@ function showView(name) {
   if (el) el.classList.remove("hidden");
   currentView = name;
   document.querySelectorAll(".nav-btn").forEach(b=>b.classList.remove("active"));
-  if (["dashboard","profiles","allcases"].includes(name)) {
+  if (["dashboard","profiles","allcases","profile"].includes(name)) {
     const btn = document.querySelector(`.nav-btn[data-nav="${name}"]`);
     if (btn) btn.classList.add("active");
   }
@@ -57,6 +57,7 @@ function navTo(view) {
   if (view==="dashboard") renderDashboard();
   if (view==="profiles")  renderProfiles();
   if (view==="allcases")  renderAllCases();
+  if (view==="profile")   renderUserProfile();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -175,9 +176,18 @@ function renderDashProfiles() {
 // ═══════════════════════════════════════════════════════════════
 function renderProfiles() {
   document.getElementById("profiles-count").textContent = `${profiles.length} profile${profiles.length!==1?"s":""} total`;
+
+  // Show/hide New Attorney button - only show when current user has no profile of their own
+  const newBtn = document.getElementById("new-attorney-btn");
+  if (newBtn) {
+    const myUid = window._currentUser?.uid || (window._auth && window._auth.currentUser?.uid);
+    const hasMyProfile = profiles.some(p => p.ownerUid === myUid);
+    newBtn.style.display = !hasMyProfile ? "inline-flex" : "none";
+  }
+
   const el = document.getElementById("profiles-grid");
   if (profiles.length===0) {
-    el.innerHTML='<div class="empty-state" style="grid-column:1/-1"><div class="empty-state-icon">👤</div><div style="font-size:16px;margin-bottom:8px">No profiles yet</div><div style="font-size:13px">Add your first attorney profile to get started.</div></div>';
+    el.innerHTML='<div class="empty-state" style="grid-column:1/-1"><div class="empty-state-icon">👤</div><div style="font-size:16px;margin-bottom:8px">No profiles yet</div><div style="font-size:13px">Click "New Attorney" to add your first profile.</div></div>';
     return;
   }
   el.innerHTML = profiles.map(p=>{
@@ -210,11 +220,24 @@ function renderProfileDetail() {
   const p = selProfile;
   if (!p) return;
 
+  const myUid = window._currentUser?.uid || (window._auth && window._auth.currentUser?.uid);
+  const isOwner = p.ownerUid === myUid;
+
   const driveChip = p.driveFolderId
     ? `<a href="https://drive.google.com/drive/folders/${p.driveFolderId}" target="_blank" style="font-size:12px;color:var(--green);display:inline-flex;align-items:center;gap:6px;text-decoration:none;font-weight:500;padding:4px 10px;background:rgba(34,197,94,0.08);border-radius:6px;border:1px solid rgba(34,197,94,0.2)" title="Open Drive Folder">📁 Drive Folder →</a>`
-    : (accessToken
+    : (accessToken && isOwner
         ? `<button onclick="createProfileFolderManual()" style="background:transparent;border:1px solid var(--amber);color:var(--amber);font-size:12px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;font-weight:500;padding:4px 10px;border-radius:6px;transition:all 0.2s" onmouseenter="this.style.background='rgba(245,158,11,0.08)'" onmouseleave="this.style.background='transparent'">📁 Create Drive Folder</button>`
-        : `<span style="font-size:12px;color:var(--text-dim);display:inline-flex;align-items:center;gap:6px">📁 Drive not connected</span>`);
+        : `<span style="font-size:12px;color:var(--text-dim);display:inline-flex;align-items:center;gap:6px">📁 No Drive folder linked</span>`);
+
+  const controlsHtml = isOwner
+    ? `<div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn btn-secondary btn-sm" onclick="openEditProfile()">✏️ Edit</button>
+        <button class="btn btn-danger btn-sm" onclick="confirmDeleteProfile()">🗑 Delete</button>
+        <button class="btn btn-primary btn-sm" onclick="openAddCase()">+ Add Case</button>
+      </div>`
+    : `<div style="display:flex;gap:10px;flex-wrap:wrap">
+        <span style="font-size:12px;color:var(--text-dim);padding:6px 12px;background:var(--surface2);border-radius:6px;border:1px solid var(--border)">🔒 Read-Only Profile</span>
+      </div>`;
 
   document.getElementById("profile-header-card").innerHTML = `
     ${avatarDiv(p.name,p.avatarColor,64,p.photoUrl)}
@@ -228,11 +251,7 @@ function renderProfileDetail() {
         ${driveChip}
       </div>
     </div>
-    <div style="display:flex;gap:10px;flex-wrap:wrap">
-      <button class="btn btn-secondary btn-sm" onclick="openEditProfile()">✏️ Edit</button>
-      <button class="btn btn-danger btn-sm" onclick="confirmDeleteProfile()">🗑 Delete</button>
-      <button class="btn btn-primary btn-sm" onclick="openAddCase()">+ Add Case</button>
-    </div>
+    ${controlsHtml}
   `;
 
   const pc=cases.filter(c=>c.profileId===p.id);
@@ -337,6 +356,14 @@ function renderAllCases() {
 function renderCaseDetail() {
   const c = selCase;
   const p = profiles.find(x=>x.id===c.profileId);
+  const myUid = window._currentUser?.uid || (window._auth && window._auth.currentUser?.uid);
+  const isOwner = c.ownerUid === myUid;
+
+  // Toggle edit and delete button visibility depending on ownership
+  const editBtn = document.querySelector("#view-caseDetail .btn-secondary");
+  const deleteBtn = document.querySelector("#view-caseDetail .btn-danger");
+  if (editBtn) editBtn.style.display = isOwner ? "inline-flex" : "none";
+  if (deleteBtn) deleteBtn.style.display = isOwner ? "inline-flex" : "none";
 
   document.getElementById("cd-title").textContent = c.title;
   document.getElementById("cd-back-btn").onclick = ()=>{ showView("profileDetail"); renderProfileDetail(); };
@@ -365,10 +392,12 @@ function renderCaseDetail() {
   const docs = c.documents||[];
   let docsHtml = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
     <div style="font-size:15px;font-weight:700;color:var(--text)">Documents</div>
-    <button class="btn btn-primary btn-sm" onclick="addDocToCase()">+ Upload</button>
+    ${isOwner ? `<button class="btn btn-primary btn-sm" onclick="addDocToCase()">+ Upload</button>` : ''}
   </div>`;
   if (docs.length===0) {
-    docsHtml+=`<div class="upload-area" onclick="addDocToCase()"><div style="font-size:28px;margin-bottom:6px">📎</div><div>Click to attach a document</div></div>`;
+    docsHtml+= isOwner
+      ? `<div class="upload-area" onclick="addDocToCase()"><div style="font-size:28px;margin-bottom:6px">📎</div><div>Click to attach a document</div></div>`
+      : `<div style="text-align:center;padding:20px;color:var(--text-dim)">No documents attached.</div>`;
   } else {
     docsHtml+=docs.map((doc,i)=>`
       <div class="doc-item">
@@ -381,20 +410,26 @@ function renderCaseDetail() {
             </div>
             <div style="font-size:12px;color:var(--text-dim)">${doc.size} · ${doc.date}${doc.driveFileId?' · ✅ Drive':''}</div>
           </div>
-          <button style="background:transparent;border:none;color:var(--red);font-size:18px;cursor:pointer;padding:2px 10px;flex-shrink:0" onclick="removeDocFromCase(${i})">×</button>
+          ${isOwner ? `<button style="background:transparent;border:none;color:var(--red);font-size:18px;cursor:pointer;padding:2px 10px;flex-shrink:0" onclick="removeDocFromCase(${i})">×</button>` : ''}
         </div>
-
       </div>`).join("");
-    docsHtml+=`<div class="upload-area" style="margin-top:10px;border:1px dashed var(--border)" onclick="addDocToCase()">+ Add more documents</div>`;
+    if (isOwner) {
+      docsHtml+=`<div class="upload-area" style="margin-top:10px;border:1px dashed var(--border)" onclick="addDocToCase()">+ Add more documents</div>`;
+    }
   }
   document.getElementById("cd-docs").innerHTML = docsHtml;
 
-  document.getElementById("cd-status-panel").innerHTML = `
-    <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:14px">Update Status</div>
-    ${STATUS_OPTIONS.map(st=>`
-      <button onclick="updateCaseStatus('${st}')" style="display:block;width:100%;margin-bottom:8px;padding:10px 16px;border-radius:10px;border:1px solid ${c.status===st?statusColor(st):"var(--border)"};background:${c.status===st?statusColor(st)+"18":"transparent"};color:${c.status===st?statusColor(st):"var(--text-muted)"};text-align:left;cursor:pointer;font-size:13px;font-family:var(--font-body);font-weight:${c.status===st?700:500};transition:all 0.2s">
-        ${c.status===st?"✓ ":""}${st}
-      </button>`).join("")}`;
+  if (isOwner) {
+    document.getElementById("cd-status-panel").innerHTML = `
+      <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:14px">Update Status</div>
+      ${STATUS_OPTIONS.map(st=>`
+        <button onclick="updateCaseStatus('${st}')" style="display:block;width:100%;margin-bottom:8px;padding:10px 16px;border-radius:10px;border:1px solid ${c.status===st?statusColor(st):"var(--border)"};background:${c.status===st?statusColor(st)+"18":"transparent"};color:${c.status===st?statusColor(st):"var(--text-muted)"};text-align:left;cursor:pointer;font-size:13px;font-family:var(--font-body);font-weight:${c.status===st?700:500};transition:all 0.2s">
+          ${c.status===st?"✓ ":""}${st}
+        </button>`).join("")}`;
+    document.getElementById("cd-status-panel").style.display = "block";
+  } else {
+    document.getElementById("cd-status-panel").style.display = "none";
+  }
 }
 
 async function updateCaseStatus(st) {
@@ -449,7 +484,7 @@ function renderQuickAccess() {
 
 // ═══════════════════════════════════════════════════════════════
 //  OPEN HELPERS
-// ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
 function openProfile(id) {
   selProfile = profiles.find(p=>p.id===id);
   if (!selProfile) return;

@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 //  LEX FIRMA — INTERNAL CHAT
 //  Group chat + Direct Messages, backed by Firestore
-//  Sender identity stored in localStorage (set once on first open)
+//  Sender identity uses Firebase Auth displayName (no separate prompt)
 // ═══════════════════════════════════════════════════════════════
 
 (function () {
@@ -13,8 +13,8 @@
   let dmUnsub        = null;
   let unreadGroup    = 0;
   let unreadDm       = 0;
-  let myUid          = null;      // stable random id stored in localStorage
-  let myName         = null;
+  let myUid          = null;      // Firebase auth uid
+  let myName         = null;      // Firebase auth displayName or email
 
   const COLLECTION_GROUP = "chat_group";
   const COLLECTION_DM    = "chat_dm";
@@ -22,11 +22,14 @@
 
   // ── Identity ─────────────────────────────────────────────────
   function loadIdentity() {
-    myUid  = localStorage.getItem("chatUid");
-    myName = localStorage.getItem("chatName");
-    if (!myUid) {
-      myUid = "uid_" + Date.now() + "_" + Math.random().toString(36).slice(2);
-      localStorage.setItem("chatUid", myUid);
+    const user = window._currentUser || (window._auth && window._auth.currentUser);
+    if (user) {
+      myUid  = user.uid;
+      myName = user.displayName || user.email || "Attorney";
+    } else {
+      // Fallback: wait for auth state
+      myUid  = null;
+      myName = null;
     }
   }
 
@@ -39,9 +42,16 @@
     loadIdentity();
     injectStyles();
     buildUI();
-    if (!myName) {
-      // Show name prompt right away (non-blocking)
-      setTimeout(openNamePrompt, 600);
+    // Listen for auth changes to update identity
+    if (window._auth && window._fbOnAuth) {
+      window._fbOnAuth(window._auth, user => {
+        if (user) {
+          myUid = user.uid;
+          myName = user.displayName || user.email || "Attorney";
+          window._currentUser = user;
+          announcePeer();
+        }
+      });
     }
   }
 
@@ -77,7 +87,6 @@
           <span class="chat-header-title">Internal Chat</span>
         </div>
         <div class="chat-header-actions">
-          <button class="chat-icon-btn" id="chat-name-btn" title="Change display name">✏️</button>
           <button class="chat-icon-btn" id="chat-close-btn" title="Close">✕</button>
         </div>
       </div>
@@ -122,7 +131,6 @@
 
     // Wire buttons
     document.getElementById("chat-close-btn").addEventListener("click", toggleChat);
-    document.getElementById("chat-name-btn").addEventListener("click", openNamePrompt);
     document.getElementById("chat-send-group").addEventListener("click", sendGroup);
     document.getElementById("chat-send-dm").addEventListener("click", sendDm);
 
@@ -142,6 +150,13 @@
   }
 
   function openChat() {
+    if (!myName) {
+      loadIdentity();
+      if (!myName) {
+        showToast("Please sign in to use chat", "error");
+        return;
+      }
+    }
     chatOpen = true;
     document.getElementById("chat-panel").classList.remove("hidden");
     document.getElementById("chat-panel").classList.add("open");
@@ -186,79 +201,22 @@
     }
   }
 
-  // ═══════════════════════════════════════════════════════════
-  //  NAME PROMPT
-  // ═══════════════════════════════════════════════════════════
-  function openNamePrompt() {
-    const existing = document.getElementById("chat-name-modal");
-    if (existing) existing.remove();
-
-    const modal = document.createElement("div");
-    modal.id = "chat-name-modal";
-    modal.className = "chat-name-modal";
-    modal.innerHTML = `
-      <div class="chat-name-box">
-        <div class="chat-name-title">Your display name</div>
-        <div class="chat-name-sub">This is how you appear in chat to other attorneys.</div>
-        <input id="chat-name-input" class="chat-name-input" type="text" placeholder="e.g. Atty. Santos" maxlength="40"
-               value="${myName || ""}" />
-        <div style="display:flex;gap:8px;margin-top:12px">
-          ${myName ? `<button class="chat-name-cancel" onclick="document.getElementById('chat-name-modal').remove()">Cancel</button>` : ""}
-          <button class="chat-name-save" id="chat-name-save-btn">Save</button>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(modal);
-
-    const input = document.getElementById("chat-name-input");
-    input.focus();
-    input.select();
-
-    document.getElementById("chat-name-save-btn").addEventListener("click", saveName);
-    input.addEventListener("keydown", e => { if (e.key === "Enter") saveName(); });
-  }
-
-  function saveName() {
-    const val = document.getElementById("chat-name-input")?.value?.trim();
-    if (!val) return;
-    myName = val;
-    localStorage.setItem("chatName", myName);
-    document.getElementById("chat-name-modal")?.remove();
-    // Announce presence in peer list
-    announcePeer();
-  }
-
   // ── Announce this user in the peers collection so DM list works ──
   async function announcePeer() {
     if (!window._db || !myUid || !myName) return;
     try {
       const db = window._db;
       const peerRef = window._fbDoc(db, "chat_peers", myUid);
-      await window._fbUpdate(peerRef, { uid: myUid, name: myName, lastSeen: window._fbServerTs() })
-        .catch(async () => {
-          // Doc doesn't exist yet — create it
-          await window._fbAddDoc
-            ? null
-            : null;
-          const { setDoc } = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js");
-          await setDoc(peerRef, { uid: myUid, name: myName, lastSeen: window._fbServerTs() });
-        });
-    } catch (e) {
-      // Use addDoc fallback: store in a simpler peers collection
+      // Try update first, fallback to setDoc
       try {
-        // Check if peer doc already exists via getDocs
-        const db = window._db;
-        const snap = await window._fbGetDocs(
-          window._fbQuery(window._fbCol(db, "chat_peers"), window._fbWhere("uid", "==", myUid))
-        );
-        if (snap.empty) {
-          await window._fbAddDoc(window._fbCol(db, "chat_peers"), { uid: myUid, name: myName, lastSeen: window._fbServerTs() });
-        } else {
-          await window._fbUpdate(window._fbDoc(db, "chat_peers", snap.docs[0].id), { name: myName, lastSeen: window._fbServerTs() });
-        }
-      } catch (err) {
-        console.warn("chat peer announce error:", err);
+        await window._fbUpdate(peerRef, { uid: myUid, name: myName, lastSeen: window._fbServerTs() });
+      } catch (updateErr) {
+        // Doc doesn't exist — create it using setDoc via dynamic import
+        const { setDoc } = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js");
+        await setDoc(peerRef, { uid: myUid, name: myName, lastSeen: window._fbServerTs() });
       }
+    } catch (e) {
+      console.warn("chat peer announce error:", e);
     }
   }
 
@@ -281,8 +239,6 @@
       renderMessages("chat-messages-group", msgs, false);
 
       if (!chatOpen || activeTab !== "group") {
-        const added = snap.docChanges().filter(c => c.type === "added").length;
-        // Only count new messages not from self
         const newFromOthers = snap.docChanges()
           .filter(c => c.type === "added" && c.doc.data().uid !== myUid).length;
         if (newFromOthers > 0) {
@@ -297,7 +253,7 @@
   }
 
   async function sendGroup() {
-    if (!myName) { openNamePrompt(); return; }
+    if (!myName) { showToast("Please sign in to send messages", "error"); return; }
     const input = document.getElementById("chat-input-group");
     const text  = input.value.trim();
     if (!text || !window._db) return;
@@ -399,7 +355,7 @@
   }
 
   async function sendDm() {
-    if (!myName) { openNamePrompt(); return; }
+    if (!myName) { showToast("Please sign in to send messages", "error"); return; }
     if (!activeDmPeer) return;
     const input = document.getElementById("chat-input-dm");
     const text  = input.value.trim();
@@ -811,59 +767,6 @@
       }
       .dm-back-btn:hover { background: var(--surface-raised, #2a2a2a); }
       #dm-conv-title { font-size: 13px; font-weight: 700; color: var(--text, #eee); }
-
-      /* ── Name prompt modal ─────────────────────────────── */
-      .chat-name-modal {
-        position: fixed;
-        inset: 0;
-        background: rgba(0,0,0,0.65);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 10000;
-      }
-      .chat-name-box {
-        background: var(--surface, #1c1c1c);
-        border: 1px solid var(--border, #2a2a2a);
-        border-radius: 14px;
-        padding: 24px;
-        width: 300px;
-        box-shadow: 0 8px 40px rgba(0,0,0,0.6);
-      }
-      .chat-name-title { font-size: 15px; font-weight: 700; color: var(--text, #eee); margin-bottom: 6px; }
-      .chat-name-sub { font-size: 12px; color: var(--text-dim, #888); margin-bottom: 14px; line-height: 1.5; }
-      .chat-name-input {
-        width: 100%;
-        box-sizing: border-box;
-        background: var(--input-bg, #111);
-        border: 1px solid var(--border, #2a2a2a);
-        border-radius: 10px;
-        padding: 10px 14px;
-        font-size: 14px;
-        color: var(--text, #eee);
-        outline: none;
-      }
-      .chat-name-input:focus { border-color: var(--gold, #c9a84c); }
-      .chat-name-save {
-        flex: 1;
-        background: var(--gold, #c9a84c);
-        color: #111;
-        border: none;
-        border-radius: 10px;
-        padding: 10px 18px;
-        font-size: 13px;
-        font-weight: 700;
-        cursor: pointer;
-      }
-      .chat-name-cancel {
-        background: transparent;
-        border: 1px solid var(--border, #2a2a2a);
-        color: var(--text-dim, #888);
-        border-radius: 10px;
-        padding: 10px 14px;
-        font-size: 13px;
-        cursor: pointer;
-      }
     `;
     document.head.appendChild(s);
   }
