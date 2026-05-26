@@ -62,7 +62,7 @@
       <div style="font-size:20px;font-weight:700;color:var(--text);margin-bottom:6px">Welcome to Simando Law</div>
       <div style="font-size:13px;color:var(--text-muted)">Let's set up your attorney profile to get started</div>
     </div>
-    
+
     <div id="onboard-form">
       <!-- Step 1: Attorney Details -->
       <div style="margin-bottom:20px">
@@ -70,37 +70,37 @@
         <input class="field-input" id="onb-name" placeholder="Full name" autocomplete="name"/>
         <div class="field-err hidden" id="onb-name-err">Required</div>
       </div>
-      
+
       <div style="margin-bottom:20px">
         <label class="field-label">Specialization / Role *</label>
         <input class="field-input" id="onb-role" placeholder="e.g., Corporate Law, Criminal Defense" autocomplete="off"/>
         <div class="field-err hidden" id="onb-role-err">Required</div>
       </div>
-      
+
       <div style="margin-bottom:20px">
         <label class="field-label">Email Address</label>
         <input class="field-input" id="onb-email" type="email" placeholder="your.email@law.com" autocomplete="email"/>
       </div>
-      
+
       <div style="margin-bottom:20px">
         <label class="field-label">Contact Number</label>
         <input class="field-input" id="onb-contact" placeholder="+63 9XX XXX XXXX" autocomplete="tel"/>
       </div>
-      
-      <!-- Step 2: Google Drive Connection -->
+
+      <!-- Step 2: Google Drive Connection (OPTIONAL) -->
       <div style="background:var(--surface2);border:1px solid var(--gold-border);border-radius:12px;padding:16px;margin-bottom:20px">
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
           <span style="font-size:20px">🔗</span>
           <div>
             <div style="font-size:13px;font-weight:600;color:var(--text)">Google Drive Connection</div>
-            <div style="font-size:11px;color:var(--text-muted)">Required to store documents</div>
+            <div style="font-size:11px;color:var(--text-muted)">Optional — connect later from your profile</div>
           </div>
         </div>
         <div id="onb-drive-status" class="drive-status-chip disconnected" style="margin-bottom:12px">● Not Connected</div>
         <button class="btn btn-primary" id="onb-drive-btn" onclick="connectDriveForOnboarding()" style="width:100%;font-size:13px">Connect Google Drive</button>
         <div class="field-err hidden" id="onb-drive-err" style="margin-top:8px;text-align:left">Please connect your Google Drive account</div>
       </div>
-      
+
       <!-- Avatar Color Selection -->
       <div style="margin-bottom:20px">
         <label class="field-label">Avatar Color</label>
@@ -113,7 +113,7 @@
           `).join('')}
         </div>
       </div>
-      
+
       <div style="display:flex;gap:12px;justify-content:flex-end;margin-top:24px;padding-top:16px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="logoutOnboardCancel()" id="onb-cancel-btn">Skip</button>
         <button class="btn btn-primary" onclick="completeOnboarding()" id="onb-complete-btn">Create Profile</button>
@@ -161,6 +161,8 @@
       <button class="nav-btn" data-nav="profiles" onclick="navTo('profiles')">👤&nbsp;&nbsp;Attorneys</button>
       <div class="nav-section">Cases</div>
       <button class="nav-btn" data-nav="allcases" onclick="navTo('allcases')">📋&nbsp;&nbsp;All Cases</button>
+      <div class="nav-section">Account</div>
+      <button class="nav-btn" data-nav="profile" onclick="navTo('profile')">⚙️&nbsp;&nbsp;My Profile</button>
     </div>
     <div id="quick-access" style="border-top:1px solid rgba(201,168,76,0.1);padding-bottom:10px;display:none">
       <div class="nav-section" style="margin-top:10px">Quick Access</div>
@@ -309,6 +311,87 @@
         <div>
           <div class="card" id="cd-docs"></div>
           <div class="card mt-16" id="cd-status-panel"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── MY PROFILE (USER ACCOUNT) ── -->
+    <div id="view-profile" class="view hidden">
+      <div class="page-hdr">
+        <div>
+          <div class="page-title">My Profile</div>
+          <div class="page-sub">Manage your account settings and security</div>
+        </div>
+      </div>
+      <div style="max-width:640px">
+        <!-- Account Info Card -->
+        <div class="card" style="margin-bottom:24px">
+          <div style="font-size:15px;font-weight:700;color:var(--gold);margin-bottom:20px;display:flex;align-items:center;gap:8px">
+            <span style="font-size:18px">👤</span> Account Information
+          </div>
+          <div class="grid2">
+            <div>
+              <label class="field-label">Display Name</label>
+              <input class="field-input" id="up-name" placeholder="Your name" />
+            </div>
+            <div>
+              <label class="field-label">Email Address</label>
+              <input class="field-input" id="up-email" type="email" disabled style="opacity:0.6;cursor:not-allowed" />
+            </div>
+          </div>
+          <div class="form-actions" style="margin-top:20px">
+            <button class="btn btn-primary" onclick="saveUserProfile()" id="up-save-btn">Update Profile</button>
+            <span class="form-msg" id="up-msg"></span>
+          </div>
+        </div>
+
+        <!-- Password Change Card -->
+        <div class="card" style="margin-bottom:24px">
+          <div style="font-size:15px;font-weight:700;color:var(--gold);margin-bottom:20px;display:flex;align-items:center;gap:8px">
+            <span style="font-size:18px">🔐</span> Change Password
+          </div>
+          <div style="margin-bottom:16px">
+            <label class="field-label">Current Password *</label>
+            <div class="pw-wrap">
+              <input class="field-input" id="up-old-pw" type="password" placeholder="Enter your current password" />
+              <button class="pw-eye" type="button" onclick="togglePwField('up-old-pw',this)">👁</button>
+            </div>
+            <div class="field-err hidden" id="up-old-pw-err">Required</div>
+          </div>
+          <div style="margin-bottom:16px">
+            <label class="field-label">New Password *</label>
+            <div class="pw-wrap">
+              <input class="field-input" id="up-new-pw" type="password" placeholder="Min. 8 characters" />
+              <button class="pw-eye" type="button" onclick="togglePwField('up-new-pw',this)">👁</button>
+            </div>
+            <div class="field-err hidden" id="up-new-pw-err">Must be at least 8 characters</div>
+          </div>
+          <div style="margin-bottom:16px">
+            <label class="field-label">Confirm New Password *</label>
+            <div class="pw-wrap">
+              <input class="field-input" id="up-confirm-pw" type="password" placeholder="Re-enter new password" />
+              <button class="pw-eye" type="button" onclick="togglePwField('up-confirm-pw',this)">👁</button>
+            </div>
+            <div class="field-err hidden" id="up-confirm-pw-err">Passwords do not match</div>
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-primary" onclick="changeUserPassword()" id="up-pw-btn">Change Password</button>
+            <span class="form-msg" id="up-pw-msg"></span>
+          </div>
+        </div>
+
+        <!-- Danger Zone -->
+        <div class="card" style="border-color:rgba(248,113,113,0.2)">
+          <div style="font-size:15px;font-weight:700;color:var(--red);margin-bottom:16px;display:flex;align-items:center;gap:8px">
+            <span style="font-size:18px">⚠️</span> Danger Zone
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+            <div>
+              <div style="font-size:13px;font-weight:600;color:var(--text)">Sign Out</div>
+              <div style="font-size:12px;color:var(--text-dim);margin-top:2px">Log out of your account on this device</div>
+            </div>
+            <button class="btn btn-danger" onclick="doLogout()">Sign Out</button>
+          </div>
         </div>
       </div>
     </div>
