@@ -813,6 +813,11 @@ async function saveCase() {
 // ═══════════════════════════════════════════════════════════════
 //  BOOT
 // ═══════════════════════════════════════════════════════════════
+async function doLogout() {
+  if (window._auth && window._fbSignOut) await window._fbSignOut(window._auth);
+  window.location.replace("login.html");
+}
+
 function enterLocalMode(reason) {
   localMode = true;
   const banner = document.getElementById("config-banner");
@@ -830,6 +835,29 @@ function initAppUI() {
   bindProfileInputs();
   showView("dashboard");
   renderDashboard();
+  // Set up signed-in user display in sidebar
+  if (window._auth && window._fbOnAuth) {
+    window._fbOnAuth(window._auth, async user => {
+      if (!user) { window.location.replace("login.html"); return; }
+      const nameEl   = document.getElementById("auth-user-display");
+      const avatarEl = document.getElementById("auth-avatar");
+      const name = user.displayName || user.email || "";
+      if (nameEl)   nameEl.textContent = name;
+      if (avatarEl) avatarEl.textContent = name.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase() || "U";
+      // Show admin link if admin role
+      try {
+        if (window._db) {
+          const snap = await window._fbGetDocs(
+            window._fbQuery(window._fbCol(window._db,"allowedUsers"), window._fbWhere("uid","==",user.uid))
+          );
+          if (!snap.empty && snap.docs[0].data().role === "admin") {
+            const al = document.getElementById("admin-link");
+            if (al) al.style.display = "block";
+          }
+        }
+      } catch(e) { /* non-critical */ }
+    });
+  }
 }
 
 async function connectDatabase() {
