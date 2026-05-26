@@ -813,6 +813,11 @@ async function saveCase() {
 // ═══════════════════════════════════════════════════════════════
 //  BOOT
 // ═══════════════════════════════════════════════════════════════
+async function doLogout() {
+  if (window._auth && window._fbSignOut) await window._fbSignOut(window._auth);
+  window.location.replace("login.html");
+}
+
 function enterLocalMode(reason) {
   localMode = true;
   const banner = document.getElementById("config-banner");
@@ -830,6 +835,29 @@ function initAppUI() {
   bindProfileInputs();
   showView("dashboard");
   renderDashboard();
+  // Set up signed-in user display in sidebar
+  if (window._auth && window._fbOnAuth) {
+    window._fbOnAuth(window._auth, async user => {
+      if (!user) { window.location.replace("login.html"); return; }
+      const nameEl   = document.getElementById("auth-user-display");
+      const avatarEl = document.getElementById("auth-avatar");
+      const name = user.displayName || user.email || "";
+      if (nameEl)   nameEl.textContent = name;
+      if (avatarEl) avatarEl.textContent = name.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase() || "U";
+      // Show admin link if admin role
+      try {
+        if (window._db) {
+          const snap = await window._fbGetDocs(
+            window._fbQuery(window._fbCol(window._db,"allowedUsers"), window._fbWhere("uid","==",user.uid))
+          );
+          if (!snap.empty && snap.docs[0].data().role === "admin") {
+            const al = document.getElementById("admin-link");
+            if (al) al.style.display = "block";
+          }
+        }
+      } catch(e) { /* non-critical */ }
+    });
+  }
 }
 
 async function connectDatabase() {
@@ -839,6 +867,8 @@ async function connectDatabase() {
     if (banner) banner.classList.remove("show");
     try {
       await dbLoad();
+      // Check if user needs onboarding after data loads
+      await showOnboardingIfNeeded();
     } catch (err) {
       console.error("Database load failed:", err);
       enterLocalMode("Database connection failed.");
@@ -850,6 +880,184 @@ async function connectDatabase() {
 
 let uiBooted = false;
 let dbConnected = false;
+
+// ═══════════════════════════════════════════════════════════════
+//  ONBOARDING FLOW
+// ═══════════════════════════════════════════════════════════════
+let onbColor = AVATAR_COLORS[0];
+let onbDriveConnected = false;
+
+function selectOnboardColor(color) {
+  onbColor = color;
+  // Visual feedback
+  document.querySelectorAll('[id^="onb-color-"]').forEach(btn => {
+    btn.style.transform = 'scale(1)';
+    btn.style.boxShadow = 'none';
+  });
+  const selectedIdx = AVATAR_COLORS.indexOf(color);
+  if (selectedIdx >= 0) {
+    const selectedBtn = document.getElementById(`onb-color-${selectedIdx}`);
+    if (selectedBtn) {
+      selectedBtn.style.transform = 'scale(1.1)';
+      selectedBtn.style.boxShadow = `0 0 0 3px rgba(201,165,92,0.4)`;
+    }
+  }
+}
+
+async function connectDriveForOnboarding() {
+  const btn = document.getElementById("onb-drive-btn");
+  const statusEl = document.getElementById("onb-drive-status");
+  const errorEl = document.getElementById("onb-drive-err");
+  
+  btn.disabled = true;
+  btn.textContent = "Connecting...";
+  errorEl.classList.add("hidden");
+
+  try {
+    // Wait for Google Drive to be ready
+    await waitForGoogleDriveReady();
+    // Prompt for Drive auth
+    await promptDriveAuth();
+    
+    // Success!
+    onbDriveConnected = true;
+    statusEl.className = "drive-status-chip connected";
+    statusEl.textContent = "● Connected";
+    btn.textContent = "✓ Google Drive Connected";
+    btn.disabled = true;
+    btn.style.opacity = "0.7";
+    
+  } catch(e) {
+    console.error("Drive connection failed:", e);
+    onbDriveConnected = false;
+    btn.disabled = false;
+    btn.textContent = "Connect Google Drive";
+    errorEl.textContent = "Failed to connect. Please try again.";
+    errorEl.classList.remove("hidden");
+  }
+}
+
+function clearOnboardErrors() {
+  document.getElementById("onb-name-err").classList.add("hidden");
+  document.getElementById("onb-role-err").classList.add("hidden");
+  document.getElementById("onb-drive-err").classList.add("hidden");
+}
+
+function showOnboardError(fieldId, msg) {
+  const errEl = document.getElementById(fieldId);
+  if (errEl) {
+    errEl.textContent = msg;
+    errEl.classList.remove("hidden");
+  }
+}
+
+async function completeOnboarding() {
+  clearOnboardErrors();
+  
+  const name = document.getElementById("onb-name").value.trim();
+  const role = document.getElementById("onb-role").value.trim();
+  const email = document.getElementById("onb-email").value.trim();
+  const contact = document.getElementById("onb-contact").value.trim();
+  
+  let valid = true;
+  
+  if (!name) {
+    showOnboardError("onb-name-err", "Attorney name is required");
+    valid = false;
+  }
+  if (!role) {
+    showOnboardError("onb-role-err", "Specialization/role is required");
+    valid = false;
+  }
+  if (!onbDriveConnected) {
+    showOnboardError("onb-drive-err", "You must connect Google Drive to continue");
+    valid = false;
+  }
+  
+  if (!valid) return;
+  
+  const btn = document.getElementById("onb-complete-btn");
+  btn.disabled = true;
+  btn.textContent = "Creating...";
+  
+  try {
+    // Create the profile
+    const profileData = {
+      name,
+      role,
+      email,
+      contact,
+      avatarColor: onbColor,
+      createdAt: new Date().toISOString(),
+      ownerUid: window._currentUser?.uid,
+      driveFolderId: window._driveRootFolderId || null
+    };
+    
+    await dbAddProfile(profileData);
+    
+    // Close the modal
+    closeOnboardingModal();
+    
+    // Navigate to profiles view
+    showToast("Profile created successfully!", "success");
+    navTo("profiles");
+    renderProfiles();
+    
+  } catch(e) {
+    console.error("Error creating profile:", e);
+    btn.disabled = false;
+    btn.textContent = "Create Profile";
+    showToast("Failed to create profile. Please try again.", "error");
+  }
+}
+
+function closeOnboardingModal() {
+  const modal = document.getElementById("onboarding-modal");
+  if (modal) modal.classList.add("hidden");
+}
+
+function logoutOnboardCancel() {
+  if (confirm("Skip setup? You can always set up your profile later from the Attorney profiles section.")) {
+    closeOnboardingModal();
+    showView("dashboard");
+  }
+}
+
+// Check and show onboarding modal after app loads
+async function showOnboardingIfNeeded() {
+  if (!window._db || !window._currentUser) return;
+  
+  try {
+    const needsOnboarding = await checkNeedsOnboarding();
+    if (needsOnboarding) {
+      // Reset onboarding form
+      document.getElementById("onb-name").value = "";
+      document.getElementById("onb-role").value = "";
+      document.getElementById("onb-email").value = "";
+      document.getElementById("onb-contact").value = "";
+      onbColor = AVATAR_COLORS[0];
+      onbDriveConnected = false;
+      
+      // Reset drive status
+      const statusEl = document.getElementById("onb-drive-status");
+      const btn = document.getElementById("onb-drive-btn");
+      statusEl.className = "drive-status-chip disconnected";
+      statusEl.textContent = "● Not Connected";
+      btn.disabled = false;
+      btn.textContent = "Connect Google Drive";
+      btn.style.opacity = "1";
+      
+      // Select first color as default
+      selectOnboardColor(AVATAR_COLORS[0]);
+      
+      // Show the modal
+      const modal = document.getElementById("onboarding-modal");
+      if (modal) modal.classList.remove("hidden");
+    }
+  } catch(e) {
+    console.error("Error checking onboarding status:", e);
+  }
+}
 
 document.addEventListener("firebase-ready", () => {
   if (!uiBooted) {
