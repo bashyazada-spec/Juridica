@@ -281,7 +281,7 @@ async function changeUserPassword() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  PROFILE FORM — DRIVE AUTH REQUIRED
+//  PROFILE FORM — DRIVE AUTH RECOMMENDED (BUT OPTIONAL)
 // ═══════════════════════════════════════════════════════════════
 let pfDriveConnected = false;
 
@@ -303,8 +303,22 @@ function openAddProfile() {
   // Reset Drive auth UI
   resetDriveAuthUI();
 
-  // Disable details section until Drive is connected
-  setDetailsEnabled(false);
+  // Keep inputs accessible even without connecting Drive first
+  setDetailsEnabled(true);
+
+  // Enable save button immediately for the optional onboarding flow
+  const saveBtn = document.getElementById("pf-save-btn");
+  saveBtn.disabled = false;
+  saveBtn.style.opacity = "1";
+  saveBtn.style.cursor = "pointer";
+  document.getElementById("pf-save-btn-text").textContent = "Create Profile";
+
+  const reqBadge = document.getElementById("pf-drive-required");
+  if (reqBadge) {
+    reqBadge.textContent = "RECOMMENDED";
+    reqBadge.style.color = "var(--amber)";
+    reqBadge.style.background = "rgba(251,191,36,0.1)";
+  }
 
   clearProfileErrors();
   resetPhotoUpload();
@@ -398,7 +412,7 @@ async function connectDriveForProfile() {
   errorEl.classList.add("hidden");
 
   try {
-    // Wait up to 8s for GIS to initialize (handles slow loads & new Netlify domains)
+    // Wait up to 8s for GIS to initialize
     await waitForGoogleDriveReady();
 
     await promptDriveAuth();
@@ -430,9 +444,15 @@ async function connectDriveForProfile() {
     console.error("Drive auth failed:", err);
     btn.disabled = false;
     btnText.textContent = "Connect Google Drive Account";
-    errorEl.textContent = err.message || "Failed to connect. Please try again.";
+
+    // Output helpful instructions directly targeting origin errors inside the error box
+    const currentOrigin = window.location.origin;
+    errorEl.innerHTML = `Connection failed.<br><br>
+      <span style="color:var(--text); font-weight:600;">Configuration Notice:</span><br>
+      Ensure the following domain is added to <strong>Authorized JavaScript Origins</strong> in your <a href="https://console.cloud.google.com/" target="_blank" style="color:var(--gold);text-decoration:underline;">Google Cloud Console</a> credential settings:<br>
+      <strong style="color:var(--gold); font-family:monospace; background:rgba(0,0,0,0.25); padding:4px 8px; border-radius:4px; display:inline-block; margin:6px 0;">${currentOrigin}</strong>`;
     errorEl.classList.remove("hidden");
-    showToast("Drive connection failed: " + err.message, "error");
+    showToast("Drive connection failed", "error");
   }
 }
 
@@ -531,10 +551,12 @@ function clearProfileErrors() {
 }
 
 async function saveProfile() {
-  // Validate Drive connection for new profiles
+  // Validate Drive connection for new profiles - fully optional to bypass domain changes
   if (profFormMode === "add" && !pfDriveConnected) {
-    showToast("Please connect Google Drive before creating a profile", "error");
-    return;
+    const proceed = confirm(
+      "Google Drive is not connected.\n\nYou can still create this profile, but folder creation and automated document uploading features will be disabled for this attorney.\n\nDo you want to proceed without Google Drive?"
+    );
+    if (!proceed) return;
   }
 
   const name=document.getElementById("pf-name").value.trim();
@@ -561,27 +583,29 @@ async function saveProfile() {
       // Refresh profiles view to hide New Attorney button
       renderProfiles();
 
-      // Auto-create Drive folder now that we're connected
-      showToast("Creating Drive folder...");
-      const folderId = await createDriveFolder(`Simando Law — ${np.name}`, DRIVE_FOLDER_ID || null);
-      if (folderId) {
-        await dbUpdateProfile(np.id, { driveFolderId: folderId });
-        np.driveFolderId = folderId;
-        showToast("Drive folder created!");
-      }
+      // Auto-create Drive folder now if connected
+      if (pfDriveConnected) {
+        showToast("Creating Drive folder...");
+        const folderId = await createDriveFolder(`Simando Law — ${np.name}`, DRIVE_FOLDER_ID || null);
+        if (folderId) {
+          await dbUpdateProfile(np.id, { driveFolderId: folderId });
+          np.driveFolderId = folderId;
+          showToast("Drive folder created!");
+        }
 
-      // Upload profile photo to Drive if provided
-      if (pfPhotoDataUrl && np.driveFolderId) {
-        try {
-          showToast("Uploading profile photo...");
-          const { fileId, thumbnailUrl } = await uploadProfilePhotoToDrive(pfPhotoDataUrl, np.driveFolderId, np.name);
-          await dbUpdateProfile(np.id, { photoFileId: fileId, photoUrl: thumbnailUrl });
-          np.photoFileId = fileId;
-          np.photoUrl = thumbnailUrl;
-          showToast("Profile photo saved!");
-        } catch (photoErr) {
-          console.error("Photo upload error:", photoErr);
-          showToast("Profile created, but photo upload failed: " + photoErr.message, "error");
+        // Upload profile photo to Drive if provided
+        if (pfPhotoDataUrl && np.driveFolderId) {
+          try {
+            showToast("Uploading profile photo...");
+            const { fileId, thumbnailUrl } = await uploadProfilePhotoToDrive(pfPhotoDataUrl, np.driveFolderId, np.name);
+            await dbUpdateProfile(np.id, { photoFileId: fileId, photoUrl: thumbnailUrl });
+            np.photoFileId = fileId;
+            np.photoUrl = thumbnailUrl;
+            showToast("Profile photo saved!");
+          } catch (photoErr) {
+            console.error("Photo upload error:", photoErr);
+            showToast("Profile created, but photo upload failed: " + photoErr.message, "error");
+          }
         }
       }
 
@@ -776,8 +800,6 @@ function parsePartiesString(str) {
   cfPetitioners = [];
   cfRespondents = [];
   if (!str) return;
-  // Left-side labels: Petitioner, Plaintiff, Private Complainant
-  // Right-side labels: Respondent, Defendant, Accused
   const leftLabels = ["petitioner", "plaintiff", "private complainant"];
   const rightLabels = ["respondent", "defendant", "accused"];
   str.split("|").forEach(seg => {
@@ -827,7 +849,6 @@ function setVenueValue(val) {
     sel.value = match;
     manual.style.display = "none";
   } else if (val) {
-    // Value is a custom string — select "Other (specify)" and fill manual
     sel.value = "Other (specify)";
     manual.style.display = "block";
     manual.value = val;
@@ -932,11 +953,9 @@ async function saveCase() {
     venue:getVenueValue(),
     documents:pendingDocs,
   };
-  // Persist new case type to system-wide list
   const ct = document.getElementById("cf-type-input").value.trim();
   if (ct) dbAddCaseType(ct);
   try {
-    // Sync any locally-staged files to Drive under the correct case-type folder
     const caseType = data.category;
     const profileFolderId = selProfile?.driveFolderId || null;
     const hadLocalFiles = pendingDocs.some(d => d._localTempId);
@@ -947,7 +966,6 @@ async function saveCase() {
         delete clean._localTempId; // don't persist temp markers
         return clean;
       });
-      // Warn if files couldn't be uploaded to Drive (token expired)
       const stillLocal = data.documents.some(d => !d.driveFileId && d.name);
       if (hadLocalFiles && stillLocal) {
         showToast("Case saved — Drive session expired. Re-connect Drive to upload files.", "error");
@@ -999,7 +1017,6 @@ function initAppUI() {
   bindProfileInputs();
   showView("dashboard");
   renderDashboard();
-  // Set up signed-in user display in sidebar
   if (window._auth && window._fbOnAuth) {
     window._fbOnAuth(window._auth, async user => {
       if (!user) { window.location.replace("login.html"); return; }
@@ -1008,7 +1025,6 @@ function initAppUI() {
       const name = user.displayName || user.email || "";
       if (nameEl)   nameEl.textContent = name;
       if (avatarEl) avatarEl.textContent = name.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase() || "U";
-      // Show admin link if admin role
       try {
         if (window._db) {
           const snap = await window._fbGetDocs(
@@ -1031,7 +1047,6 @@ async function connectDatabase() {
     if (banner) banner.classList.remove("show");
     try {
       await dbLoad();
-      // Check if user needs onboarding after data loads
       await showOnboardingIfNeeded();
     } catch (err) {
       console.error("Database load failed:", err);
@@ -1053,7 +1068,6 @@ let onbDriveConnected = false;
 
 function selectOnboardColor(color) {
   onbColor = color;
-  // Visual feedback
   document.querySelectorAll('[id^="onb-color-"]').forEach(btn => {
     btn.style.transform = 'scale(1)';
     btn.style.boxShadow = 'none';
@@ -1078,12 +1092,9 @@ async function connectDriveForOnboarding() {
   errorEl.classList.add("hidden");
 
   try {
-    // Wait for Google Drive to be ready
     await waitForGoogleDriveReady();
-    // Prompt for Drive auth
     await promptDriveAuth();
 
-    // Success!
     onbDriveConnected = true;
     statusEl.className = "drive-status-chip connected";
     statusEl.textContent = "● Connected";
@@ -1133,7 +1144,6 @@ async function completeOnboarding() {
     showOnboardError("onb-role-err", "Specialization/role is required");
     valid = false;
   }
-  // Drive is now OPTIONAL — removed the required check
 
   if (!valid) return;
 
@@ -1142,7 +1152,6 @@ async function completeOnboarding() {
   btn.textContent = "Creating...";
 
   try {
-    // Create the profile
     const profileData = {
       name,
       role,
@@ -1155,11 +1164,8 @@ async function completeOnboarding() {
     };
 
     await dbAddProfile(profileData);
-
-    // Close the modal
     closeOnboardingModal();
 
-    // Navigate to profiles view
     showToast("Profile created successfully!", "success");
     navTo("profiles");
     renderProfiles();
@@ -1184,14 +1190,12 @@ function logoutOnboardCancel() {
   }
 }
 
-// Check and show onboarding modal after app loads
 async function showOnboardingIfNeeded() {
   if (!window._db || !window._currentUser) return;
 
   try {
     const needsOnboarding = await checkNeedsOnboarding();
     if (needsOnboarding) {
-      // Reset onboarding form
       document.getElementById("onb-name").value = "";
       document.getElementById("onb-role").value = "";
       document.getElementById("onb-email").value = "";
@@ -1199,7 +1203,6 @@ async function showOnboardingIfNeeded() {
       onbColor = AVATAR_COLORS[0];
       onbDriveConnected = false;
 
-      // Reset drive status
       const statusEl = document.getElementById("onb-drive-status");
       const btn = document.getElementById("onb-drive-btn");
       statusEl.className = "drive-status-chip disconnected";
@@ -1208,10 +1211,8 @@ async function showOnboardingIfNeeded() {
       btn.textContent = "Connect Google Drive";
       btn.style.opacity = "1";
 
-      // Select first color as default
       selectOnboardColor(AVATAR_COLORS[0]);
 
-      // Show the modal
       const modal = document.getElementById("onboarding-modal");
       if (modal) modal.classList.remove("hidden");
     }
