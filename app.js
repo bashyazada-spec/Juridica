@@ -1,1266 +1,949 @@
-// ═══════════════════════════════════════════════════════════════
-//  DELETE CONFIRMATION — TYPE "DELETE" TO CONFIRM
-//  CRITICAL: Store target in a closure variable, NOT global deleteTarget
-// ═══════════════════════════════════════════════════════════════
-let _pendingDeleteTarget = null;
+/* ═══════════════════════════════════════════════════════════════
+   SIMANDO LAW — CASE MANAGER  ·  Elevated UI v2
+   Refined legal luxury · Deep obsidian · Burnished gold
+   ═══════════════════════════════════════════════════════════════ */
 
-function confirmDeleteProfile() {
-  const cnt = cases.filter(c => c.profileId === selProfile.id).length;
-  _pendingDeleteTarget = { type: "profile", id: selProfile.id, name: selProfile.name, caseCount: cnt };
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,600&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&display=swap');
 
-  document.getElementById("del-title").textContent = "Delete Attorney Profile?";
-  document.getElementById("del-body").innerHTML = 
-    `You are about to permanently remove <strong style="color:var(--text)">${selProfile.name}</strong> and all ${cnt} associated case(s).<br>This action <strong>cannot</strong> be undone.`;
+/* ── THEME VARIABLES ── */
+:root {
+  --navy:        #0a1520;
+  --navy-light:  #112030;
+  --navy-dark:   #060d14;
+  --gold:        #c9a55c;
+  --gold-light:  #e0c080;
+  --gold-pale:   #f5e6c4;
+  --gold-dim:    rgba(201,165,92,0.09);
+  --gold-dim2:   rgba(201,165,92,0.05);
+  --gold-border: rgba(201,165,92,0.26);
+  --gold-border2:rgba(201,165,92,0.14);
+  --cream:       #f2ede4;
 
-  openDeleteModal();
+  --bg:          #060c13;
+  --bg2:         #08111a;
+  --surface:     #0c1826;
+  --surface2:    #091422;
+  --surface3:    #10202e;
+  --surface4:    #0f1d2b;
+  --border:      #162033;
+  --border-soft: #1c2d3f;
+  --text:        #d8e4f0;
+  --text-muted:  #6b82a0;
+  --text-dim:    #344556;
+  --text-inverse:#060c13;
+
+  --green:  #34d399;
+  --amber:  #fbbf24;
+  --red:    #f87171;
+  --violet: #818cf8;
+  --cyan:   #22d3ee;
+
+  --sidebar-w:   264px;
+  --font-display:'Cormorant Garamond', Georgia, serif;
+  --font-body:   'DM Sans', system-ui, sans-serif;
+  --radius:      10px;
+  --radius-lg:   16px;
+  --radius-xl:   22px;
+  --shadow:      0 12px 48px rgba(0,0,0,0.6);
+  --shadow-sm:   0 4px 16px rgba(0,0,0,0.35);
+  --shadow-gold: 0 4px 24px rgba(201,165,92,0.18);
+  --glow-gold:   0 0 40px rgba(201,165,92,0.07);
 }
 
-function confirmDeleteCase() {
-  _pendingDeleteTarget = { type: "case", id: selCase.id, title: selCase.title };
-
-  document.getElementById("del-title").textContent = "Delete Case?";
-  document.getElementById("del-body").innerHTML = 
-    `You are about to permanently remove <strong style="color:var(--text)">${selCase.title}</strong>.<br>This action <strong>cannot</strong> be undone.`;
-
-  openDeleteModal();
+/* ── LIGHT MODE ── */
+[data-theme="light"] {
+  --bg:          #edeae2;
+  --bg2:         #e5e1d8;
+  --surface:     #f5f2eb;
+  --surface2:    #edeae2;
+  --surface3:    #e8e4da;
+  --surface4:    #f0ece4;
+  --border:      #d6cfc1;
+  --border-soft: #dfd9ce;
+  --text:        #0a1520;
+  --text-muted:  #566375;
+  --text-dim:    #9aabbf;
+  --text-inverse:#f2ede4;
+  --shadow:      0 12px 48px rgba(10,21,32,0.1);
+  --shadow-sm:   0 4px 16px rgba(10,21,32,0.07);
+  --shadow-gold: 0 4px 24px rgba(201,165,92,0.14);
+  --glow-gold:   0 0 40px rgba(201,165,92,0.04);
 }
 
-function openDeleteModal() {
-  const modal = document.getElementById("delete-modal");
-  const input = document.getElementById("del-confirm-input");
-  const btn = document.getElementById("del-confirm-btn");
-  const err = document.getElementById("del-input-err");
-
-  // Reset state
-  input.value = "";
-  btn.disabled = true;
-  btn.style.opacity = "0.5";
-  err.classList.add("hidden");
-
-  // Remove old listeners to prevent stacking
-  const newBtn = btn.cloneNode(true);
-  btn.parentNode.replaceChild(newBtn, btn);
-
-  // Input validation
-  input.oninput = () => {
-    const val = input.value.trim().toUpperCase();
-    if (val === "DELETE") {
-      newBtn.disabled = false;
-      newBtn.style.opacity = "1";
-      err.classList.add("hidden");
-    } else {
-      newBtn.disabled = true;
-      newBtn.style.opacity = "0.5";
-    }
-  };
-
-  input.onkeydown = (e) => {
-    if (e.key === "Enter" && !newBtn.disabled) {
-      executeDelete();
-    }
-  };
-
-  // Confirm button handler
-  newBtn.onclick = () => executeDelete();
-
-  modal.classList.remove("hidden");
-  setTimeout(() => input.focus(), 50);
+/* ── RESET & BASE ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.6;
+  transition: background 0.3s, color 0.3s;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-function closeDeleteModal() {
-  document.getElementById("delete-modal").classList.add("hidden");
-  _pendingDeleteTarget = null;
+button { font-family: var(--font-body); cursor: pointer; border: none; background: none; }
+input, select, textarea { font-family: var(--font-body); }
+a { color: inherit; text-decoration: none; }
+
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-soft); border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: var(--gold-border); }
+
+/* ── LAYOUT ── */
+#app { display: flex; min-height: 100vh; }
+
+/* ── SIDEBAR ── */
+#sidebar {
+  width: var(--sidebar-w);
+  background: linear-gradient(175deg, #0a1624 0%, #06101a 55%, #040c15 100%);
+  position: fixed; top: 0; bottom: 0; left: 0; z-index: 20;
+  display: flex; flex-direction: column;
+  border-right: 1px solid rgba(201,165,92,0.1);
+  overflow-y: auto; overflow-x: hidden;
+  box-shadow: 4px 0 40px rgba(0,0,0,0.45);
 }
 
-async function executeDelete() {
-  const target = _pendingDeleteTarget;
-  if (!target) {
-    console.error("No pending delete target");
-    return;
-  }
-
-  closeDeleteModal();
-
-  try {
-    if (target.type === "case") {
-      await dbDeleteCase(target.id);
-      // Remove from local array immediately for responsive UI
-      cases = cases.filter(c => c.id !== target.id);
-      selCase = null;
-      showToast("Case deleted successfully", "error");
-      showView("profileDetail");
-      renderProfileDetail();
-
-    } else if (target.type === "profile") {
-      // Delete all associated cases first
-      const toDelete = cases.filter(c => c.profileId === target.id);
-      for (const c of toDelete) {
-        await dbDeleteCase(c.id);
-      }
-      // Remove from local arrays immediately
-      cases = cases.filter(c => c.profileId !== target.id);
-
-      await dbDeleteProfile(target.id);
-      profiles = profiles.filter(p => p.id !== target.id);
-
-      selProfile = null;
-      selCase = null;
-      showToast(`Profile "${target.name}" and ${toDelete.length} case(s) deleted`, "error");
-      navTo("profiles");
-      renderQuickAccess();
-    }
-
-    // Refresh dashboard stats if visible
-    if (currentView === "dashboard") renderDashboard();
-
-  } catch (err) {
-    console.error("executeDelete error:", err);
-    showToast("Delete failed: " + (err.message || "Unknown error"), "error");
-  }
+#sidebar::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(201,165,92,0.45), transparent);
 }
 
-// ═══════════════════════════════════════════════════════════════
-//  USER PROFILE / ACCOUNT PAGE
-// ═══════════════════════════════════════════════════════════════
+#sidebar::-webkit-scrollbar { width: 2px; }
+#sidebar::-webkit-scrollbar-thumb { background: rgba(201,165,92,0.12); }
 
-function renderUserProfile() {
-  const user = window._currentUser || (window._auth && window._auth.currentUser);
-  if (!user) return;
-
-  document.getElementById("up-name").value = user.displayName || "";
-  document.getElementById("up-email").value = user.email || "";
-
-  // Clear any previous messages
-  document.getElementById("up-msg").textContent = "";
-  document.getElementById("up-msg").className = "form-msg";
-  document.getElementById("up-pw-msg").textContent = "";
-  document.getElementById("up-pw-msg").className = "form-msg";
-  clearUserProfileErrors();
+#main {
+  margin-left: var(--sidebar-w);
+  flex: 1;
+  padding: 40px 48px;
+  min-height: 100vh;
+  background: var(--bg);
+  transition: background 0.3s;
 }
 
-function clearUserProfileErrors() {
-  ["up-old-pw-err", "up-new-pw-err", "up-confirm-pw-err"].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.classList.add("hidden");
-  });
-  ["up-old-pw", "up-new-pw", "up-confirm-pw"].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.classList.remove("err");
-  });
+/* ── SIDEBAR LOGO ── */
+.logo-wrap {
+  padding: 30px 24px 22px;
+  border-bottom: 1px solid rgba(201,165,92,0.08);
+  position: relative;
 }
 
-async function saveUserProfile() {
-  const name = document.getElementById("up-name").value.trim();
-  const msgEl = document.getElementById("up-msg");
-  const btn = document.getElementById("up-save-btn");
-
-  if (!name) {
-    msgEl.textContent = "Name cannot be empty";
-    msgEl.className = "form-msg error";
-    return;
-  }
-
-  btn.disabled = true;
-  btn.textContent = "Updating...";
-
-  try {
-    const user = window._auth.currentUser;
-    if (!user) throw new Error("Not signed in");
-
-    // Update Firebase Auth profile
-    await window._fbUpdateProfile(user, { displayName: name });
-
-    // Update sidebar display
-    const nameEl = document.getElementById("auth-user-display");
-    const avatarEl = document.getElementById("auth-avatar");
-    if (nameEl) nameEl.textContent = name;
-    if (avatarEl) avatarEl.textContent = name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase() || "U";
-
-    // Update current user reference
-    window._currentUser = user;
-
-    msgEl.textContent = "✓ Profile updated";
-    msgEl.className = "form-msg success";
-    showToast("Profile updated successfully");
-  } catch (err) {
-    console.error("saveUserProfile error:", err);
-    msgEl.textContent = "Failed: " + (err.message || "Unknown error");
-    msgEl.className = "form-msg error";
-  } finally {
-    btn.disabled = false;
-    btn.textContent = "Update Profile";
-  }
+.logo-wrap::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: radial-gradient(ellipse at 50% 50%, rgba(201,165,92,0.05) 0%, transparent 70%);
+  pointer-events: none;
 }
 
-function togglePwField(inputId, btn) {
-  const input = document.getElementById(inputId);
-  if (input.type === "password") {
-    input.type = "text";
-    btn.textContent = "🙈";
-  } else {
-    input.type = "password";
-    btn.textContent = "👁";
-  }
+.logo-img {
+  width: 100%; max-width: 176px;
+  height: auto; margin-bottom: 8px;
+  position: relative; z-index: 1;
 }
 
-async function changeUserPassword() {
-  const oldPw = document.getElementById("up-old-pw").value;
-  const newPw = document.getElementById("up-new-pw").value;
-  const confirmPw = document.getElementById("up-confirm-pw").value;
-  const msgEl = document.getElementById("up-pw-msg");
-  const btn = document.getElementById("up-pw-btn");
-
-  clearUserProfileErrors();
-
-  let valid = true;
-  if (!oldPw) {
-    document.getElementById("up-old-pw-err").classList.remove("hidden");
-    document.getElementById("up-old-pw").classList.add("err");
-    valid = false;
-  }
-  if (!newPw || newPw.length < 8) {
-    document.getElementById("up-new-pw-err").classList.remove("hidden");
-    document.getElementById("up-new-pw").classList.add("err");
-    valid = false;
-  }
-  if (newPw !== confirmPw) {
-    document.getElementById("up-confirm-pw-err").classList.remove("hidden");
-    document.getElementById("up-confirm-pw").classList.add("err");
-    valid = false;
-  }
-  if (!valid) return;
-
-  btn.disabled = true;
-  btn.textContent = "Changing...";
-
-  try {
-    const user = window._auth.currentUser;
-    if (!user || !user.email) throw new Error("Not signed in");
-
-    // Import EmailAuthProvider for reauthentication
-    const { EmailAuthProvider, reauthenticateWithCredential, updatePassword } = await import(
-      "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js"
-    );
-
-    // Reauthenticate with old password
-    const credential = EmailAuthProvider.credential(user.email, oldPw);
-    await reauthenticateWithCredential(user, credential);
-
-    // Change password
-    await updatePassword(user, newPw);
-
-    // Clear fields
-    document.getElementById("up-old-pw").value = "";
-    document.getElementById("up-new-pw").value = "";
-    document.getElementById("up-confirm-pw").value = "";
-
-    msgEl.textContent = "✓ Password changed successfully";
-    msgEl.className = "form-msg success";
-    showToast("Password changed successfully");
-  } catch (err) {
-    console.error("changeUserPassword error:", err);
-    let errMsg = "Failed to change password";
-    const code = err.code || "";
-    if (code === "auth/wrong-password" || code === "auth/invalid-credential") {
-      errMsg = "Current password is incorrect";
-      document.getElementById("up-old-pw").classList.add("err");
-    } else if (code === "auth/weak-password") {
-      errMsg = "New password is too weak";
-      document.getElementById("up-new-pw").classList.add("err");
-    } else if (code === "auth/requires-recent-login") {
-      errMsg = "Please sign out and sign back in, then try again";
-    } else {
-      errMsg = err.message || errMsg;
-    }
-    msgEl.textContent = errMsg;
-    msgEl.className = "form-msg error";
-  } finally {
-    btn.disabled = false;
-    btn.textContent = "Change Password";
-  }
+.logo-sub {
+  font-size: 8.5px;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  color: var(--gold);
+  opacity: 0.42;
+  font-weight: 500;
+  position: relative; z-index: 1;
 }
 
-// ═══════════════════════════════════════════════════════════════
-//  PROFILE FORM — DRIVE AUTH RECOMMENDED (BUT OPTIONAL)
-// ═══════════════════════════════════════════════════════════════
-let pfDriveConnected = false;
-
-function openAddProfile() {
-  profFormMode="add";
-  pfColor=AVATAR_COLORS[0];
-  pfDriveConnected = false;
-  pfPhotoDataUrl = null;
-
-  // Reset form
-  document.getElementById("pf-title").textContent="New Attorney Profile";
-  document.getElementById("pf-name").value="";
-  document.getElementById("pf-role").value="";
-  document.getElementById("pf-contact").value="";
-  document.getElementById("pf-email").value="";
-  document.getElementById("pf-cancel-btn").onclick=()=>navTo("profiles");
-  document.getElementById("pf-back-btn").onclick=()=>navTo("profiles");
-
-  // Reset Drive auth UI
-  resetDriveAuthUI();
-
-  // Keep inputs accessible even without connecting Drive first
-  setDetailsEnabled(true);
-
-  // Enable save button immediately for the optional onboarding flow
-  const saveBtn = document.getElementById("pf-save-btn");
-  saveBtn.disabled = false;
-  saveBtn.style.opacity = "1";
-  saveBtn.style.cursor = "pointer";
-  document.getElementById("pf-save-btn-text").textContent = "Create Profile";
-
-  const reqBadge = document.getElementById("pf-drive-required");
-  if (reqBadge) {
-    reqBadge.textContent = "RECOMMENDED";
-    reqBadge.style.color = "var(--amber)";
-    reqBadge.style.background = "rgba(251,191,36,0.1)";
-  }
-
-  clearProfileErrors();
-  resetPhotoUpload();
-  updateAvatarPreview();
-  showView("profileForm");
+/* ── SIDEBAR NAV ── */
+.nav-section {
+  padding: 22px 24px 7px;
+  font-size: 8.5px;
+  letter-spacing: 2.8px;
+  text-transform: uppercase;
+  color: rgba(201,165,92,0.32);
+  font-weight: 600;
 }
 
-function openEditProfile() {
-  const p=selProfile;
-  profFormMode="edit";
-  pfColor=p.avatarColor || AVATAR_COLORS[0];
-  pfPhotoDataUrl = p.photoUrl || null;  // use Drive URL for preview
-  pfDriveConnected = true; // Already has drive folder or can skip
-
-  document.getElementById("pf-title").textContent="Edit Profile";
-  document.getElementById("pf-name").value=p.name;
-  document.getElementById("pf-role").value=p.role;
-  document.getElementById("pf-contact").value=p.contact||"";
-  document.getElementById("pf-email").value=p.email||"";
-  document.getElementById("pf-cancel-btn").onclick=()=>{ showView("profileDetail"); renderProfileDetail(); };
-  document.getElementById("pf-back-btn").onclick=()=>{ showView("profileDetail"); renderProfileDetail(); };
-
-  // For edit, hide the drive auth requirement (already connected)
-  const driveSection = document.getElementById("pf-drive-section");
-  if (driveSection) driveSection.style.display = "none";
-
-  setDetailsEnabled(true);
-  document.getElementById("pf-save-btn").disabled = false;
-  document.getElementById("pf-save-btn").style.opacity = "1";
-  document.getElementById("pf-save-btn").style.cursor = "pointer";
-  document.getElementById("pf-save-btn-text").textContent = "Save Changes";
-
-  clearProfileErrors();
-  resetPhotoUpload();
-  // If they already have a photo, show it
-  if (pfPhotoDataUrl) {
-    showPhotoPreview(pfPhotoDataUrl);
-  }
-  updateAvatarPreview();
-  showView("profileForm");
+.nav-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 24px 10px 22px;
+  background: transparent;
+  border: none;
+  border-left: 2px solid transparent;
+  color: rgba(216,228,240,0.38);
+  font-size: 13px;
+  text-align: left;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  font-weight: 400;
+  letter-spacing: 0.1px;
+  position: relative;
 }
 
-function resetDriveAuthUI() {
-  const driveSection = document.getElementById("pf-drive-section");
-  if (driveSection) driveSection.style.display = "block";
-
-  const statusEl = document.getElementById("pf-drive-status");
-  const btn = document.getElementById("pf-connect-drive-btn");
-  const btnText = document.getElementById("pf-connect-drive-text");
-  const errorEl = document.getElementById("pf-drive-error");
-
-  if (statusEl) {
-    statusEl.className = "drive-status-chip disconnected";
-    statusEl.textContent = "● Not Connected";
-  }
-  if (btn) {
-    btn.disabled = false;
-    btn.style.opacity = "1";
-    btn.style.cursor = "pointer";
-    btn.classList.remove("connected");
-  }
-  if (btnText) btnText.textContent = "Connect Google Drive Account";
-  if (errorEl) errorEl.classList.add("hidden");
+.nav-btn:hover {
+  background: rgba(201,165,92,0.05);
+  color: rgba(216,228,240,0.75);
+  border-left-color: rgba(201,165,92,0.22);
 }
 
-function setDetailsEnabled(enabled) {
-  const section = document.getElementById("pf-details-section");
-  const inputs = section.querySelectorAll("input, select, textarea");
-
-  if (enabled) {
-    section.style.opacity = "1";
-    section.style.pointerEvents = "all";
-    section.style.filter = "none";
-    inputs.forEach(inp => inp.disabled = false);
-  } else {
-    section.style.opacity = "0.4";
-    section.style.pointerEvents = "none";
-    section.style.filter = "grayscale(0.5)";
-    inputs.forEach(inp => inp.disabled = true);
-  }
+.nav-btn.active {
+  background: linear-gradient(90deg, rgba(201,165,92,0.1), rgba(201,165,92,0.02));
+  border-left-color: var(--gold);
+  color: var(--gold-light);
+  font-weight: 500;
 }
 
-// ── DRIVE AUTH HANDLER ──
-async function connectDriveForProfile() {
-  const btn = document.getElementById("pf-connect-drive-btn");
-  const btnText = document.getElementById("pf-connect-drive-text");
-  const errorEl = document.getElementById("pf-drive-error");
-
-  btn.disabled = true;
-  btnText.textContent = "Connecting...";
-  errorEl.classList.add("hidden");
-
-  try {
-    // Wait up to 8s for GIS to initialize
-    await waitForGoogleDriveReady();
-
-    await promptDriveAuth();
-
-    // Success!
-    pfDriveConnected = true;
-
-    // Update UI
-    const statusEl = document.getElementById("pf-drive-status");
-    statusEl.className = "drive-status-chip connected";
-    statusEl.textContent = "● Connected";
-
-    btn.classList.add("connected");
-    btnText.textContent = "✓ Google Drive Connected";
-
-    // Enable details section
-    setDetailsEnabled(true);
-
-    // Enable save button
-    const saveBtn = document.getElementById("pf-save-btn");
-    saveBtn.disabled = false;
-    saveBtn.style.opacity = "1";
-    saveBtn.style.cursor = "pointer";
-    document.getElementById("pf-save-btn-text").textContent = profFormMode === "add" ? "Create Profile" : "Save Changes";
-
-    showToast("Google Drive connected successfully");
-
-  } catch (err) {
-    console.error("Drive auth failed:", err);
-    btn.disabled = false;
-    btnText.textContent = "Connect Google Drive Account";
-
-    // Output helpful instructions directly targeting origin errors inside the error box
-    const currentOrigin = window.location.origin;
-    errorEl.innerHTML = `Connection failed.<br><br>
-      <span style="color:var(--text); font-weight:600;">Configuration Notice:</span><br>
-      Ensure the following domain is added to <strong>Authorized JavaScript Origins</strong> in your <a href="https://console.cloud.google.com/" target="_blank" style="color:var(--gold);text-decoration:underline;">Google Cloud Console</a> credential settings:<br>
-      <strong style="color:var(--gold); font-family:monospace; background:rgba(0,0,0,0.25); padding:4px 8px; border-radius:4px; display:inline-block; margin:6px 0;">${currentOrigin}</strong>`;
-    errorEl.classList.remove("hidden");
-    showToast("Drive connection failed", "error");
-  }
+.nav-btn.active::after {
+  content: '';
+  position: absolute;
+  right: 16px; top: 50%;
+  transform: translateY(-50%);
+  width: 5px; height: 5px;
+  background: var(--gold);
+  border-radius: 50%;
+  opacity: 0.7;
 }
 
-// ── PHOTO UPLOAD ──
-let pfPhotoDataUrl = null;
-
-function resetPhotoUpload() {
-  pfPhotoDataUrl = null;
-  const input = document.getElementById("pf-photo-input");
-  if (input) input.value = "";
-  const dropzone = document.getElementById("pf-photo-dropzone");
-  const previewWrap = document.getElementById("pf-photo-preview-wrap");
-  const initialsWrap = document.getElementById("pf-photo-initials-wrap");
-  if (dropzone) dropzone.style.display = "block";
-  if (previewWrap) previewWrap.style.display = "none";
-  if (initialsWrap) initialsWrap.style.display = "flex";
+.sidebar-footer {
+  padding: 16px 24px;
+  border-top: 1px solid rgba(201,165,92,0.06);
+  font-size: 10px;
+  color: rgba(216,228,240,0.14);
+  text-align: center;
+  line-height: 1.9;
 }
 
-function showPhotoPreview(dataUrl) {
-  const dropzone = document.getElementById("pf-photo-dropzone");
-  const previewWrap = document.getElementById("pf-photo-preview-wrap");
-  const initialsWrap = document.getElementById("pf-photo-initials-wrap");
-  const img = document.getElementById("pf-photo-preview-img");
-  if (dropzone) dropzone.style.display = "none";
-  if (previewWrap) { previewWrap.style.display = "flex"; }
-  if (initialsWrap) initialsWrap.style.display = "none";
-  if (img) img.src = dataUrl;
+.suggest-report-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  margin-bottom: 10px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(201,168,76,0.25);
+  background: rgba(201,168,76,0.06);
+  color: var(--gold);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: var(--font-body);
+}
+.suggest-report-btn:hover {
+  background: rgba(201,168,76,0.14);
+  border-color: rgba(201,168,76,0.5);
+  color: var(--gold);
 }
 
-function handlePhotoUpload(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-  if (file.size > 2 * 1024 * 1024) {
-    showToast("Photo must be under 2MB", "error");
-    return;
-  }
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    pfPhotoDataUrl = e.target.result;
-    showPhotoPreview(pfPhotoDataUrl);
-  };
-  reader.readAsDataURL(file);
+.quick-avatar {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 8px; font-weight: 700;
+  flex-shrink: 0;
 }
 
-function removePhoto() {
-  pfPhotoDataUrl = null;
-  const input = document.getElementById("pf-photo-input");
-  if (input) input.value = "";
-  resetPhotoUpload();
-  updateAvatarPreview();
+/* ── THEME SWITCH ── */
+.theme-switch {
+  position: fixed; top: 22px; right: 24px; z-index: 100;
+  cursor: pointer; user-select: none;
 }
 
-function updateAvatarPreview() {
-  const name=document.getElementById("pf-name")?.value||"Preview";
-  const role=document.getElementById("pf-role")?.value||"Role";
-
-  // Update initials preview
-  const av=document.getElementById("pf-avatar-preview");
-  if (av) av.textContent=initials(name);
-
-  const namePreviewInitials = document.getElementById("pf-name-preview-initials");
-  const rolePreviewInitials = document.getElementById("pf-role-preview-initials");
-  if (namePreviewInitials) namePreviewInitials.textContent=name==="Preview"?"Attorney Name":name;
-  if (rolePreviewInitials) rolePreviewInitials.textContent=role==="Role"?"Role":role;
-
-  // Also update name/role in the photo preview if visible
-  const namePreview = document.getElementById("pf-name-preview");
-  const rolePreview = document.getElementById("pf-role-preview");
-  if (namePreview) namePreview.textContent=name==="Preview"?"Attorney Name":name;
-  if (rolePreview) rolePreview.textContent=role==="Role"?"Role":role;
+.theme-switch-track {
+  width: 68px; height: 32px; border-radius: 16px;
+  background: linear-gradient(135deg, #0a1520 0%, #162030 100%);
+  border: 1px solid rgba(201,165,92,0.25);
+  box-shadow: var(--shadow-sm), inset 0 1px 4px rgba(0,0,0,0.4);
+  position: relative; overflow: hidden;
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex; align-items: center;
 }
 
-// Bind input listeners (only once)
-function bindProfileInputs() {
-  const nameInp = document.getElementById("pf-name");
-  const roleInp = document.getElementById("pf-role");
-  if (nameInp && !nameInp._bound) {
-    nameInp.oninput = updateAvatarPreview;
-    nameInp._bound = true;
-  }
-  if (roleInp && !roleInp._bound) {
-    roleInp.oninput = updateAvatarPreview;
-    roleInp._bound = true;
-  }
+.theme-switch-track::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(135deg, #e8dfc8 0%, #d4c9a8 100%);
+  opacity: 0;
+  transition: opacity 0.35s;
 }
 
-function clearProfileErrors() {
-  ["pf-name-err","pf-role-err","pf-drive-error"].forEach(id=>{
-    const el = document.getElementById(id);
-    if (el) el.classList.add("hidden");
-  });
-  ["pf-name","pf-role"].forEach(id=>{
-    const el = document.getElementById(id);
-    if (el) el.classList.remove("err");
-  });
+.theme-switch.is-light .theme-switch-track::before { opacity: 1; }
+
+.theme-switch-icon {
+  position: absolute; font-size: 14px; line-height: 1;
+  transition: opacity 0.25s, transform 0.25s;
+  z-index: 2;
 }
 
-async function saveProfile() {
-  // Validate Drive connection for new profiles - fully optional to bypass domain changes
-  if (profFormMode === "add" && !pfDriveConnected) {
-    const proceed = confirm(
-      "Google Drive is not connected.\n\nYou can still create this profile, but folder creation and automated document uploading features will be disabled for this attorney.\n\nDo you want to proceed without Google Drive?"
-    );
-    if (!proceed) return;
-  }
-
-  const name=document.getElementById("pf-name").value.trim();
-  const role=document.getElementById("pf-role").value.trim();
-  let valid=true;
-  if(!name){document.getElementById("pf-name-err").classList.remove("hidden");document.getElementById("pf-name").classList.add("err");valid=false;}
-  if(!role){document.getElementById("pf-role-err").classList.remove("hidden");document.getElementById("pf-role").classList.add("err");valid=false;}
-  if(!valid) return;
-
-  const data={
-    name, role,
-    contact: document.getElementById("pf-contact").value.trim(),
-    email: document.getElementById("pf-email").value.trim(),
-    avatarColor: pfColor,
-    photoDataUrl: null  // never store base64 in Firestore
-  };
-
-  try {
-    if(profFormMode==="add"){
-      data.createdAt = new Date().toISOString(); // full ISO for Firestore orderBy
-      const np = await dbAddProfile(data);
-      selProfile = np;
-
-      // Refresh profiles view to hide New Attorney button
-      renderProfiles();
-
-      // Auto-create Drive folder now if connected
-      if (pfDriveConnected) {
-        showToast("Creating Drive folder...");
-        const folderId = await createDriveFolder(`Simando Law — ${np.name}`, DRIVE_FOLDER_ID || null);
-        if (folderId) {
-          await dbUpdateProfile(np.id, { driveFolderId: folderId });
-          np.driveFolderId = folderId;
-          showToast("Drive folder created!");
-        }
-
-        // Upload profile photo to Drive if provided
-        if (pfPhotoDataUrl && np.driveFolderId) {
-          try {
-            showToast("Uploading profile photo...");
-            const { fileId, thumbnailUrl } = await uploadProfilePhotoToDrive(pfPhotoDataUrl, np.driveFolderId, np.name);
-            await dbUpdateProfile(np.id, { photoFileId: fileId, photoUrl: thumbnailUrl });
-            np.photoFileId = fileId;
-            np.photoUrl = thumbnailUrl;
-            showToast("Profile photo saved!");
-          } catch (photoErr) {
-            console.error("Photo upload error:", photoErr);
-            showToast("Profile created, but photo upload failed: " + photoErr.message, "error");
-          }
-        }
-      }
-
-      showToast("Profile created successfully!");
-      renderProfiles();
-      navTo("profiles");
-    } else {
-      // Edit mode — handle photo changes
-      if (pfPhotoDataUrl && pfPhotoDataUrl.startsWith("data:")) {
-        // New photo selected — upload it
-        try {
-          showToast("Uploading profile photo...");
-          const folderId = selProfile.driveFolderId;
-          // Delete old photo from Drive if exists
-          if (selProfile.photoFileId && hasValidToken()) {
-            await deleteDriveFile(selProfile.photoFileId).catch(() => {});
-          }
-          const { fileId, thumbnailUrl } = await uploadProfilePhotoToDrive(pfPhotoDataUrl, folderId, name);
-          data.photoFileId = fileId;
-          data.photoUrl = thumbnailUrl;
-          showToast("Profile photo updated!");
-        } catch (photoErr) {
-          console.error("Photo upload error:", photoErr);
-          showToast("Photo upload failed: " + photoErr.message, "error");
-        }
-      } else if (!pfPhotoDataUrl && selProfile.photoFileId) {
-        // Photo was removed
-        if (hasValidToken()) await deleteDriveFile(selProfile.photoFileId).catch(() => {});
-        data.photoFileId = null;
-        data.photoUrl = null;
-      } else {
-        // Photo unchanged — keep existing
-        data.photoFileId = selProfile.photoFileId || null;
-        data.photoUrl = selProfile.photoUrl || null;
-      }
-
-      await dbUpdateProfile(selProfile.id, data);
-      selProfile = {...selProfile, ...data};
-      showToast("Profile updated!");
-      showView("profileDetail");
-      renderProfileDetail();
-    }
-    renderQuickAccess();
-  } catch (err) {
-    console.error("saveProfile error:", err);
-    showToast("Failed to save profile: " + (err.message || "Unknown error"), "error");
-  }
+.theme-switch-moon {
+  right: 9px;
+  opacity: 1;
+  transform: scale(1);
 }
 
-async function createProfileFolderManual() {
-  if (!selProfile) return;
-  if (!selProfile.driveFolderId && accessToken) {
-    showToast("Creating Drive folder...");
-    const folderId = await createDriveFolder(`Simando Law — ${selProfile.name}`, DRIVE_FOLDER_ID || null);
-    if (folderId) {
-      await dbUpdateProfile(selProfile.id, { driveFolderId: folderId });
-      selProfile.driveFolderId = folderId;
-      showToast("Drive folder created!");
-      renderProfileDetail();
-    }
-  }
+.theme-switch-sun {
+  left: 9px;
+  opacity: 0;
+  transform: scale(0.7);
 }
 
-// ═══════════════════════════════════════════════════════════════
-// ── Category → Party labels ──
-function updatePartyLabels() {
-  const cat = (document.getElementById("cf-category")?.value || "").toLowerCase();
-  const labels = getPartyLabels(cat);
-  const ll = document.getElementById("cf-label-left");
-  const lr = document.getElementById("cf-label-right");
-  if (ll) ll.textContent = labels.left + "s";
-  if (lr) lr.textContent = labels.right + "s";
-  // Update error message
-  const errEl = document.getElementById("cf-parties-err");
-  if (errEl) errEl.textContent = `Add at least one ${labels.left} and one ${labels.right}`;
-  // Update placeholder text on inputs
-  const pi = document.getElementById("cf-petitioner-input");
-  const ri = document.getElementById("cf-respondent-input");
-  if (pi) pi.placeholder = labels.left + " name…";
-  if (ri) ri.placeholder = labels.right + " name…";
+.theme-switch.is-light .theme-switch-moon {
+  opacity: 0;
+  transform: scale(0.7);
 }
 
-function onCategoryChange() {
-  updatePartyLabels();
+.theme-switch.is-light .theme-switch-sun {
+  opacity: 1;
+  transform: scale(1);
 }
 
-// ── Case Type autocomplete ──
-let _caseTypeSuggestActive = -1;
-
-function onCaseTypeInput(input) {
-  const val = input.value.trim().toLowerCase();
-  const box = document.getElementById("cf-type-suggestions");
-  if (!val) { box.style.display="none"; return; }
-  const matches = caseTypesList.filter(t => t.toLowerCase().includes(val));
-  if (!matches.length) { box.style.display="none"; return; }
-  _caseTypeSuggestActive = -1;
-  box.innerHTML = matches.map((t,i) =>
-    `<div class="ct-suggestion" data-idx="${i}" data-val="${t}"
-      style="padding:10px 14px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border);transition:background 0.1s"
-      onmousedown="selectCaseTypeSuggestion('${t.replace(/'/g,"&#39;")}')"
-      onmouseover="this.style.background='var(--surface2)'"
-      onmouseout="this.style.background=''">${t}</div>`
-  ).join("");
-  box.style.display = "block";
+.theme-switch-thumb {
+  position: absolute;
+  left: 4px;
+  width: 24px; height: 24px; border-radius: 50%;
+  background: linear-gradient(145deg, var(--gold-light), var(--gold));
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4), 0 0 0 1px rgba(201,165,92,0.3);
+  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1),
+              background 0.35s;
+  z-index: 3;
 }
 
-function selectCaseTypeSuggestion(val) {
-  document.getElementById("cf-type-input").value = val;
-  document.getElementById("cf-type-suggestions").style.display = "none";
+.theme-switch.is-light .theme-switch-thumb {
+  transform: translateX(36px);
+  background: linear-gradient(145deg, #ffe8a0, #c9a55c);
 }
 
-function hideCaseTypeSuggestions() {
-  setTimeout(()=>{ const b=document.getElementById("cf-type-suggestions"); if(b) b.style.display="none"; }, 150);
+.theme-switch:hover .theme-switch-track {
+  border-color: rgba(201,165,92,0.5);
+  box-shadow: var(--shadow-sm), var(--shadow-gold), inset 0 1px 4px rgba(0,0,0,0.3);
 }
 
-function onCaseTypeKeydown(e) {
-  const box = document.getElementById("cf-type-suggestions");
-  const items = box ? box.querySelectorAll(".ct-suggestion") : [];
-  if (!items.length || box.style.display==="none") return;
-  if (e.key === "ArrowDown") {
-    e.preventDefault();
-    _caseTypeSuggestActive = Math.min(_caseTypeSuggestActive+1, items.length-1);
-    items.forEach((el,i)=>{ el.style.background = i===_caseTypeSuggestActive ? "var(--surface2)" : ""; });
-  } else if (e.key === "ArrowUp") {
-    e.preventDefault();
-    _caseTypeSuggestActive = Math.max(_caseTypeSuggestActive-1, 0);
-    items.forEach((el,i)=>{ el.style.background = i===_caseTypeSuggestActive ? "var(--surface2)" : ""; });
-  } else if (e.key === "Enter" && _caseTypeSuggestActive >= 0) {
-    e.preventDefault();
-    selectCaseTypeSuggestion(items[_caseTypeSuggestActive].dataset.val);
-  } else if (e.key === "Escape") {
-    box.style.display = "none";
-  }
+.theme-switch:active .theme-switch-thumb {
+  transform: translateX(2px) scaleX(1.15);
 }
 
-//  CASE FORM
-// ═══════════════════════════════════════════════════════════════
-
-// ── Party Builder state ──
-let cfPetitioners = [];
-let cfRespondents = [];
-
-function addParty(role) {
-  const inputId = role === "petitioner" ? "cf-petitioner-input" : "cf-respondent-input";
-  const input = document.getElementById(inputId);
-  const name = input.value.trim();
-  if (!name) { input.focus(); return; }
-  if (role === "petitioner") { cfPetitioners.push(name); }
-  else                       { cfRespondents.push(name); }
-  input.value = "";
-  input.focus();
-  renderPartyLists();
-  serializeParties();
+.theme-switch.is-light:active .theme-switch-thumb {
+  transform: translateX(34px) scaleX(1.15);
 }
 
-function removeParty(role, idx) {
-  if (role === "petitioner") cfPetitioners.splice(idx, 1);
-  else                       cfRespondents.splice(idx, 1);
-  renderPartyLists();
-  serializeParties();
+[data-theme="light"] .theme-switch-track {
+  border-color: rgba(180,150,80,0.3);
+  box-shadow: var(--shadow-sm), inset 0 1px 4px rgba(200,180,120,0.2);
 }
 
-function renderPartyLists() {
-  const chipStyle = (color, bg) =>
-    `display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:20px;font-size:12px;font-weight:500;background:${bg};border:1px solid ${color};color:${color};margin-bottom:6px;margin-right:4px`;
-  const removeBtn = (role, i) =>
-    `<button type="button" onclick="removeParty('${role}',${i})" style="background:none;border:none;cursor:pointer;padding:0;line-height:1;font-size:14px;opacity:0.6" title="Remove">×</button>`;
-
-  document.getElementById("cf-petitioners-list").innerHTML =
-    cfPetitioners.length === 0
-      ? `<div style="font-size:12px;color:var(--text-dim);font-style:italic;padding:2px 0">None added yet</div>`
-      : cfPetitioners.map((n,i) => `<span style="${chipStyle("var(--gold)","rgba(201,165,92,0.1)")}">${n} ${removeBtn("petitioner",i)}</span>`).join("");
-
-  document.getElementById("cf-respondents-list").innerHTML =
-    cfRespondents.length === 0
-      ? `<div style="font-size:12px;color:var(--text-dim);font-style:italic;padding:2px 0">None added yet</div>`
-      : cfRespondents.map((n,i) => `<span style="${chipStyle("var(--violet)","rgba(129,140,248,0.1)")}">${n} ${removeBtn("respondent",i)}</span>`).join("");
+/* ── CARDS ── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 28px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  position: relative;
+  overflow: hidden;
 }
 
-function serializeParties() {
-  // Build the parties string using the current party labels
-  const cat = document.getElementById("cf-category")?.value || "";
-  const labels = getPartyLabels(cat.toLowerCase());
-  const parts = [];
-  if (cfPetitioners.length) parts.push(labels.left + ": " + cfPetitioners.join(", "));
-  if (cfRespondents.length) parts.push(labels.right + ": " + cfRespondents.join(", "));
-  document.getElementById("cf-parties").value = parts.join(" | ");
+.card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(201,165,92,0.14), transparent);
 }
 
-function parsePartiesString(str) {
-  // Parse stored string back into arrays — handles all label variants
-  cfPetitioners = [];
-  cfRespondents = [];
-  if (!str) return;
-  const leftLabels = ["petitioner", "plaintiff", "private complainant"];
-  const rightLabels = ["respondent", "defendant", "accused"];
-  str.split("|").forEach(seg => {
-    seg = seg.trim();
-    const lower = seg.toLowerCase();
-    const colonIdx = seg.indexOf(":");
-    if (colonIdx < 0) { cfRespondents = [seg]; return; }
-    const label = lower.slice(0, colonIdx).trim();
-    const names = seg.slice(colonIdx+1).split(",").map(s=>s.trim()).filter(Boolean);
-    if (leftLabels.some(l => label.startsWith(l))) {
-      cfPetitioners = names;
-    } else if (rightLabels.some(l => label.startsWith(l))) {
-      cfRespondents = names;
-    } else {
-      cfRespondents = names; // fallback
-    }
-  });
+.card:hover {
+  border-color: rgba(201,165,92,0.2);
+  box-shadow: var(--glow-gold);
 }
 
-// ── Venue helpers ──
-function onVenueChange(sel) {
-  const manual = document.getElementById("cf-venue-manual");
-  if (sel.value === "Other (specify)") {
-    manual.style.display = "block";
-    manual.required = true;
-    manual.focus();
-  } else {
-    manual.style.display = "none";
-    manual.required = false;
-    manual.value = "";
-  }
+/* ── STAT CARDS ── */
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 24px 26px 22px;
+  transition: all 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
 }
 
-function getVenueValue() {
-  const sel = document.getElementById("cf-venue");
-  if (sel.value === "Other (specify)") {
-    return document.getElementById("cf-venue-manual").value.trim() || "Other";
-  }
-  return sel.value;
+.stat-card::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent, var(--gold)), transparent);
+  opacity: 0.7;
 }
 
-function setVenueValue(val) {
-  const sel = document.getElementById("cf-venue");
-  const manual = document.getElementById("cf-venue-manual");
-  const match = VENUES.find(v => v === val);
-  if (match) {
-    sel.value = match;
-    manual.style.display = "none";
-  } else if (val) {
-    sel.value = "Other (specify)";
-    manual.style.display = "block";
-    manual.value = val;
-  }
+.stat-card::after {
+  content: '';
+  position: absolute;
+  bottom: -24px; right: -24px;
+  width: 90px; height: 90px;
+  border-radius: 50%;
+  background: var(--accent, var(--gold));
+  opacity: 0.04;
+  transition: opacity 0.28s, transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-function populateCaseSelects() {
-  document.getElementById("cf-category").innerHTML=CASE_CATEGORIES.map(t=>`<option>${t}</option>`).join("");
-  document.getElementById("cf-status").innerHTML=STATUS_OPTIONS.map(t=>`<option>${t}</option>`).join("");
-  document.getElementById("cf-venue").innerHTML=VENUES.map(v=>`<option>${v}</option>`).join("");
-  updatePartyLabels();
+.stat-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(201,165,92,0.22);
+  box-shadow: 0 10px 36px rgba(0,0,0,0.3), var(--glow-gold);
 }
 
-function openAddCase() {
-  if (!selProfile) return;
-  caseFormMode="add";
-  pendingDocs=[];
-  cfPetitioners = selProfile.name ? [selProfile.name] : [];
-  cfRespondents = [];
-  populateCaseSelects();
-  document.getElementById("cf-title").textContent="New Case";
-  document.getElementById("cf-save-btn").textContent="Add Case";
-  document.getElementById("cf-case-title").value="";
-  document.getElementById("cf-narrative").value="";
-  document.getElementById("cf-due").value="";
-  document.getElementById("cf-category").value=CASE_CATEGORIES[0];
-  document.getElementById("cf-type-input").value="";
-  document.getElementById("cf-status").value=STATUS_OPTIONS[0];
-  setVenueValue(VENUES[0]);
-  document.getElementById("drive-status").textContent="";
-  document.getElementById("cf-back-btn").onclick=()=>{ showView("profileDetail"); renderProfileDetail(); };
-  document.getElementById("cf-cancel-btn").onclick=()=>{ showView("profileDetail"); renderProfileDetail(); };
-  renderPartyLists();
-  serializeParties();
-  renderPendingDocs();
-  clearCaseErrors();
-  updateCfChip();
-  updateDriveFolderChip();
-  showView("caseForm");
+.stat-card:hover::after {
+  opacity: 0.08;
+  transform: scale(1.35);
 }
 
-function openEditCase() {
-  const c=selCase;
-  caseFormMode="edit";
-  pendingDocs=[...(c.documents||[])];
-  parsePartiesString(c.parties);
-  populateCaseSelects();
-  document.getElementById("cf-title").textContent="Edit Case";
-  document.getElementById("cf-save-btn").textContent="Save Changes";
-  document.getElementById("cf-case-title").value=c.title;
-  document.getElementById("cf-narrative").value=c.narrative;
-  document.getElementById("cf-due").value=c.dueDate;
-  document.getElementById("cf-category").value=c.category||CASE_CATEGORIES[0];
-  document.getElementById("cf-type-input").value=c.caseType||c.type||"";
-  document.getElementById("cf-status").value=c.status;
-  updatePartyLabels(); // refresh labels after category is set
-  setVenueValue(c.venue);
-  document.getElementById("drive-status").textContent=pendingDocs.length?`${pendingDocs.length} file(s)`:"";
-  document.getElementById("cf-back-btn").onclick=()=>{ showView("caseDetail"); renderCaseDetail(); };
-  document.getElementById("cf-cancel-btn").onclick=()=>{ showView("caseDetail"); renderCaseDetail(); };
-  renderPartyLists();
-  serializeParties();
-  renderPendingDocs();
-  clearCaseErrors();
-  updateCfChip();
-  updateDriveFolderChip();
-  showView("caseForm");
+/* ── CASE ROWS ── */
+.case-row {
+  display: flex; align-items: center; gap: 16px;
+  padding: 14px 18px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 8px; cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
 }
 
-function updateCfChip() {
-  const chip=document.getElementById("cf-profile-chip");
-  if(selProfile){
-    chip.innerHTML=`${avatarDiv(selProfile.name,selProfile.avatarColor,24,selProfile.photoUrl)}<span style="font-size:13px;color:var(--text-muted)">${selProfile.name}</span>`;
-    chip.style.display="flex";
-  } else chip.style.display="none";
+.case-row::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 2px;
+  background: var(--gold);
+  transform: scaleY(0);
+  transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  transform-origin: center;
 }
 
-function clearCaseErrors() {
-  ["cf-title-err","cf-due-err","cf-parties-err","cf-narrative-err"].forEach(id=>{document.getElementById(id).classList.add("hidden");});
-  ["cf-case-title","cf-due","cf-narrative"].forEach(id=>{document.getElementById(id).classList.remove("err");});
+.case-row:hover {
+  border-color: var(--gold-border);
+  background: var(--surface3);
+  transform: translateX(4px);
+  box-shadow: var(--shadow-sm);
 }
 
-async function saveCase() {
-  serializeParties(); // make sure hidden field is current
-  const title=document.getElementById("cf-case-title").value.trim();
-  const due=document.getElementById("cf-due").value;
-  const parties=document.getElementById("cf-parties").value.trim();
-  const narrative=document.getElementById("cf-narrative").value.trim();
-  let valid=true;
-  if(!title){document.getElementById("cf-title-err").classList.remove("hidden");document.getElementById("cf-case-title").classList.add("err");valid=false;}
-  if(!due){document.getElementById("cf-due-err").classList.remove("hidden");document.getElementById("cf-due").classList.add("err");valid=false;}
-  if(cfPetitioners.length===0||cfRespondents.length===0){document.getElementById("cf-parties-err").classList.remove("hidden");valid=false;}
-  if(!narrative){document.getElementById("cf-narrative-err").classList.remove("hidden");document.getElementById("cf-narrative").classList.add("err");valid=false;}
-  if(!valid) return;
+.case-row:hover::before { transform: scaleY(1); }
 
-  const data={
-    title,dueDate:due,parties,narrative,
-    category:document.getElementById("cf-category").value,
-    caseType:document.getElementById("cf-type-input").value.trim(),
-    type:document.getElementById("cf-category").value, // keep legacy field in sync for Drive folder logic
-    status:document.getElementById("cf-status").value,
-    venue:getVenueValue(),
-    documents:pendingDocs,
-  };
-  const ct = document.getElementById("cf-type-input").value.trim();
-  if (ct) dbAddCaseType(ct);
-  try {
-    const caseType = data.category;
-    const profileFolderId = selProfile?.driveFolderId || null;
-    const hadLocalFiles = pendingDocs.some(d => d._localTempId);
-    if (typeof syncPendingFilesToDrive === "function") {
-      const syncedDocs = await syncPendingFilesToDrive(caseType, profileFolderId);
-      data.documents = syncedDocs.map(d => {
-        const clean = {...d};
-        delete clean._localTempId; // don't persist temp markers
-        return clean;
-      });
-      const stillLocal = data.documents.some(d => !d.driveFileId && d.name);
-      if (hadLocalFiles && stillLocal) {
-        showToast("Case saved — Drive session expired. Re-connect Drive to upload files.", "error");
-      }
-    }
-    if(caseFormMode==="add"){
-      data.profileId=selProfile.id;
-      data.createdAt=new Date().toISOString(); // full ISO for Firestore orderBy
-      await dbAddCase(data);
-      showToast("Case added!");
-      showView("profileDetail");
-      renderProfileDetail();
-    } else {
-      await dbUpdateCase(selCase.id,data);
-      selCase={...selCase,...data};
-      showToast("Case updated!");
-      showView("caseDetail");
-      renderCaseDetail();
-    }
-    pendingDocs=[];
-  } catch (err) {
-    console.error("saveCase error:", err);
-    showToast("Failed to save case: " + (err.message || "Unknown error"), "error");
-  }
+/* ── DOC ITEMS ── */
+.doc-item {
+  display: flex; justify-content: space-between; align-items: center;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 10px 14px; margin-bottom: 7px;
+  transition: all 0.18s;
+}
+.doc-item:hover { border-color: var(--gold-border); background: var(--surface3); }
+
+/* ── UPLOAD AREA ── */
+.upload-area {
+  border: 1px dashed var(--border-soft);
+  border-radius: var(--radius); padding: 20px;
+  cursor: pointer; text-align: center;
+  color: var(--text-dim); font-size: 13px;
+  transition: all 0.2s; background: var(--surface2);
+}
+.upload-area:hover {
+  border-color: var(--gold-border);
+  color: var(--gold); background: var(--gold-dim);
 }
 
-// ═══════════════════════════════════════════════════════════════
-//  BOOT
-// ═══════════════════════════════════════════════════════════════
-async function doLogout() {
-  if (window._auth && window._fbSignOut) await window._fbSignOut(window._auth);
-  window.location.replace("login.html");
+/* ── FORM ELEMENTS ── */
+.field-label {
+  display: block; font-size: 10px;
+  color: var(--text-muted); margin-bottom: 7px;
+  letter-spacing: 1.4px; text-transform: uppercase; font-weight: 600;
 }
 
-function enterLocalMode(reason) {
-  localMode = true;
-  const banner = document.getElementById("config-banner");
-  if (banner) {
-    banner.textContent = "⚠️ " + (reason || "Firebase not connected. Data is stored in memory only and will be lost on refresh.");
-    banner.classList.add("show");
-  }
-  showToast("Running in local mode — data will not persist", "error");
+.field-input {
+  width: 100%; background: var(--surface2);
+  border: 1px solid var(--border); border-radius: 9px;
+  color: var(--text); padding: 10px 14px;
+  font-size: 14px; outline: none;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  appearance: none; -webkit-appearance: none;
 }
 
-function initAppUI() {
-  const loader = document.getElementById("loading-screen");
-  if (loader) loader.style.display = "none";
-  initTheme();
-  bindProfileInputs();
-  showView("dashboard");
-  renderDashboard();
-  if (window._auth && window._fbOnAuth) {
-    window._fbOnAuth(window._auth, async user => {
-      if (!user) { window.location.replace("login.html"); return; }
-      const nameEl   = document.getElementById("auth-user-display");
-      const avatarEl = document.getElementById("auth-avatar");
-      const name = user.displayName || user.email || "";
-      if (nameEl)   nameEl.textContent = name;
-      if (avatarEl) avatarEl.textContent = name.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase() || "U";
-      try {
-        if (window._db) {
-          const snap = await window._fbGetDocs(
-            window._fbQuery(window._fbCol(window._db,"allowedUsers"), window._fbWhere("uid","==",user.uid))
-          );
-          if (!snap.empty && snap.docs[0].data().role === "admin") {
-            const al = document.getElementById("admin-link");
-            if (al) al.style.display = "block";
-          }
-        }
-      } catch(e) { /* non-critical */ }
-    });
-  }
+.field-input:focus {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px var(--gold-dim), 0 0 0 1px rgba(201,165,92,0.12);
+  background: var(--surface3);
 }
 
-async function connectDatabase() {
-  if (typeof window._fbReady !== "undefined" && window._fbReady && window._db) {
-    localMode = false;
-    const banner = document.getElementById("config-banner");
-    if (banner) banner.classList.remove("show");
-    try {
-      // Wait for Firebase Auth to resolve before loading data.
-      // This fixes the "No current user UID available" race condition.
-      await new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => reject(new Error("Auth timeout")), 10000);
-        const unsub = window._fbOnAuth(window._auth, user => {
-          clearTimeout(timeout);
-          unsub();
-          if (user) {
-            window._currentUser = user;
-            const el = document.getElementById("auth-user-display");
-            if (el) el.textContent = user.displayName || user.email;
-            resolve(user);
-          } else {
-            window.location.replace("login.html");
-            reject(new Error("Not authenticated"));
-          }
-        });
-      });
-      await dbLoad();
-      await showOnboardingIfNeeded();
-    } catch (err) {
-      if (err.message === "Not authenticated") return;
-      console.error("Database load failed:", err);
-      enterLocalMode("Database connection failed.");
-    }
-  } else {
-    enterLocalMode("Firebase initialization failed.");
-  }
+.field-input.err {
+  border-color: var(--red);
+  box-shadow: 0 0 0 3px rgba(248,113,113,0.08);
 }
 
-let uiBooted = false;
-let dbConnected = false;
-
-// ═══════════════════════════════════════════════════════════════
-//  ONBOARDING FLOW
-// ═══════════════════════════════════════════════════════════════
-let onbColor = AVATAR_COLORS[0];
-let onbDriveConnected = false;
-
-function selectOnboardColor(color) {
-  onbColor = color;
-  document.querySelectorAll('[id^="onb-color-"]').forEach(btn => {
-    btn.style.transform = 'scale(1)';
-    btn.style.boxShadow = 'none';
-  });
-  const selectedIdx = AVATAR_COLORS.indexOf(color);
-  if (selectedIdx >= 0) {
-    const selectedBtn = document.getElementById(`onb-color-${selectedIdx}`);
-    if (selectedBtn) {
-      selectedBtn.style.transform = 'scale(1.1)';
-      selectedBtn.style.boxShadow = `0 0 0 3px rgba(201,165,92,0.4)`;
-    }
-  }
+select.field-input {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='7' viewBox='0 0 12 7'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236b82a0' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 13px center;
+  padding-right: 34px; cursor: pointer;
 }
 
-async function connectDriveForOnboarding() {
-  const btn = document.getElementById("onb-drive-btn");
-  const statusEl = document.getElementById("onb-drive-status");
-  const errorEl = document.getElementById("onb-drive-err");
+.field-err { color: var(--red); font-size: 11px; margin-top: 5px; font-weight: 500; }
 
-  btn.disabled = true;
-  btn.textContent = "Connecting...";
-  errorEl.classList.add("hidden");
+/* ── PASSWORD WRAPPER (for profile page) ── */
+.pw-wrap { position: relative; }
+.pw-wrap .field-input { padding-right: 44px; }
+.pw-eye {
+  position: absolute; right: 11px; top: 50%; transform: translateY(-50%);
+  background: none; border: none; cursor: pointer; color: var(--text-muted);
+  font-size: 15px; padding: 3px; transition: color 0.2s;
+}
+.pw-eye:hover { color: var(--gold); }
 
-  try {
-    await waitForGoogleDriveReady();
-    await promptDriveAuth();
+/* ── FORM ACTIONS ── */
+.form-actions { display: flex; gap: 10px; margin-top: 20px; align-items: center; }
+.form-msg { font-size: 13px; margin-left: 4px; }
+.form-msg.success { color: var(--green); }
+.form-msg.error   { color: var(--red); }
 
-    onbDriveConnected = true;
-    statusEl.className = "drive-status-chip connected";
-    statusEl.textContent = "● Connected";
-    btn.textContent = "✓ Google Drive Connected";
-    btn.disabled = true;
-    btn.style.opacity = "0.7";
-
-  } catch(e) {
-    console.error("Drive connection failed:", e);
-    onbDriveConnected = false;
-    btn.disabled = false;
-    btn.textContent = "Connect Google Drive";
-    errorEl.textContent = "Failed to connect. Please try again.";
-    errorEl.classList.remove("hidden");
-  }
+/* ── BUTTONS ── */
+.btn {
+  padding: 9px 20px; border-radius: 9px; border: none;
+  font-size: 13px; font-weight: 500;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  display: inline-flex; align-items: center; gap: 7px;
+  letter-spacing: 0.15px;
 }
 
-function clearOnboardErrors() {
-  document.getElementById("onb-name-err").classList.add("hidden");
-  document.getElementById("onb-role-err").classList.add("hidden");
-  document.getElementById("onb-drive-err").classList.add("hidden");
+.btn-sm { padding: 6px 14px; font-size: 12px; border-radius: 7px; }
+
+.btn-primary {
+  background: linear-gradient(135deg, #c9a55c 0%, #aa8030 100%);
+  color: #040810;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(201,165,92,0.2);
 }
 
-function showOnboardError(fieldId, msg) {
-  const errEl = document.getElementById(fieldId);
-  if (errEl) {
-    errEl.textContent = msg;
-    errEl.classList.remove("hidden");
-  }
+.btn-primary:hover {
+  background: linear-gradient(135deg, #e0c080 0%, #c9a55c 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(201,165,92,0.32);
 }
 
-async function completeOnboarding() {
-  clearOnboardErrors();
-
-  const name = document.getElementById("onb-name").value.trim();
-  const role = document.getElementById("onb-role").value.trim();
-  const email = document.getElementById("onb-email").value.trim();
-  const contact = document.getElementById("onb-contact").value.trim();
-
-  let valid = true;
-
-  if (!name) {
-    showOnboardError("onb-name-err", "Attorney name is required");
-    valid = false;
-  }
-  if (!role) {
-    showOnboardError("onb-role-err", "Specialization/role is required");
-    valid = false;
-  }
-
-  if (!valid) return;
-
-  const btn = document.getElementById("onb-complete-btn");
-  btn.disabled = true;
-  btn.textContent = "Creating...";
-
-  try {
-    const profileData = {
-      name,
-      role,
-      email,
-      contact,
-      avatarColor: onbColor,
-      createdAt: new Date().toISOString(),
-      ownerUid: window._currentUser?.uid,
-      driveFolderId: window._driveRootFolderId || null
-    };
-
-    await dbAddProfile(profileData);
-    closeOnboardingModal();
-
-    showToast("Profile created successfully!", "success");
-    navTo("profiles");
-    renderProfiles();
-
-  } catch(e) {
-    console.error("Error creating profile:", e);
-    btn.disabled = false;
-    btn.textContent = "Create Profile";
-    showToast("Failed to create profile. Please try again.", "error");
-  }
+.btn-secondary {
+  background: var(--surface2); color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+.btn-secondary:hover {
+  background: var(--surface3); border-color: var(--gold-border); color: var(--text);
 }
 
-function closeOnboardingModal() {
-  const modal = document.getElementById("onboarding-modal");
-  if (modal) modal.classList.add("hidden");
+.btn-ghost { background: transparent; color: var(--text-muted); }
+.btn-ghost:hover { color: var(--text); background: var(--surface2); }
+
+.btn-danger {
+  background: transparent;
+  border: 1px solid rgba(248,113,113,0.2);
+  color: var(--red);
+}
+.btn-danger:hover {
+  background: rgba(248,113,113,0.07);
+  border-color: rgba(248,113,113,0.42);
 }
 
-function logoutOnboardCancel() {
-  if (confirm("Skip setup? You can always set up your profile later from the Attorney profiles section.")) {
-    closeOnboardingModal();
-    showView("dashboard");
-  }
+/* ── BADGES ── */
+.badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 10px; border-radius: 20px;
+  font-size: 10.5px; font-weight: 600; letter-spacing: 0.2px;
 }
 
-async function showOnboardingIfNeeded() {
-  if (!window._db || !window._currentUser) return;
-
-  try {
-    const needsOnboarding = await checkNeedsOnboarding();
-    if (needsOnboarding) {
-      document.getElementById("onb-name").value = "";
-      document.getElementById("onb-role").value = "";
-      document.getElementById("onb-email").value = "";
-      document.getElementById("onb-contact").value = "";
-      onbColor = AVATAR_COLORS[0];
-      onbDriveConnected = false;
-
-      const statusEl = document.getElementById("onb-drive-status");
-      const btn = document.getElementById("onb-drive-btn");
-      statusEl.className = "drive-status-chip disconnected";
-      statusEl.textContent = "● Not Connected";
-      btn.disabled = false;
-      btn.textContent = "Connect Google Drive";
-      btn.style.opacity = "1";
-
-      selectOnboardColor(AVATAR_COLORS[0]);
-
-      const modal = document.getElementById("onboarding-modal");
-      if (modal) modal.classList.remove("hidden");
-    }
-  } catch(e) {
-    console.error("Error checking onboarding status:", e);
-  }
+/* ── PAGE HEADER ── */
+.page-hdr {
+  display: flex; align-items: flex-start;
+  justify-content: space-between; margin-bottom: 36px;
 }
 
-document.addEventListener("firebase-ready", () => {
-  if (!uiBooted) {
-    uiBooted = true;
-    initAppUI();
-  }
-  if (!dbConnected) {
-    dbConnected = true;
-    connectDatabase();
-  }
-});
+.page-title {
+  font-family: var(--font-display);
+  font-size: 34px; font-weight: 600;
+  color: var(--text); letter-spacing: -0.5px; line-height: 1.1;
+}
 
-setTimeout(() => {
-  if (!uiBooted) {
-    uiBooted = true;
-    initAppUI();
-  }
-}, 2000);
+.page-sub { font-size: 12px; color: var(--text-dim); margin-top: 6px; }
 
-setTimeout(() => {
-  if (!dbConnected) {
-    dbConnected = true;
-    enterLocalMode("Firebase failed to load. Check your config and network.");
-  }
-}, 6000);
+/* ── GRID HELPERS ── */
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; }
+.divider { border: none; border-top: 1px solid var(--border); margin: 18px 0; }
+.flex-center { display: flex; align-items: center; }
+.gap-8{gap:8px} .gap-10{gap:10px} .gap-12{gap:12px} .gap-16{gap:16px}
+.mb-8{margin-bottom:8px} .mb-14{margin-bottom:14px} .mb-16{margin-bottom:16px}
+.mb-20{margin-bottom:20px} .mb-24{margin-bottom:24px}
+.mt-16{margin-top:16px} .mt-24{margin-top:24px}
+
+/* ── MODAL ── */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(4,8,16,0.88);
+  backdrop-filter: blur(14px) saturate(0.8);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 50; padding: 20px;
+}
+
+.modal-box {
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-xl);
+  padding: 40px; min-width: 380px; max-width: 480px; width: 100%;
+  box-shadow: var(--shadow), 0 0 0 1px rgba(201,165,92,0.05);
+  animation: modalIn 0.26s cubic-bezier(0.34,1.46,0.64,1);
+  position: relative; overflow: hidden;
+}
+
+.modal-box::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(201,165,92,0.3), transparent);
+}
+
+@keyframes modalIn {
+  from { opacity: 0; transform: scale(0.93) translateY(12px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* ── DELETE MODAL ── */
+.delete-confirm-input {
+  width: 100%; background: var(--surface2);
+  border: 1.5px solid var(--border); border-radius: 9px;
+  color: var(--text); padding: 12px 14px; font-size: 15px;
+  text-align: center; letter-spacing: 2px; font-weight: 600;
+  margin: 16px 0; outline: none; transition: all 0.18s;
+}
+.delete-confirm-input:focus {
+  border-color: var(--red);
+  box-shadow: 0 0 0 3px rgba(248,113,113,0.08);
+}
+.delete-confirm-input::placeholder {
+  color: var(--text-dim); letter-spacing: normal; font-weight: 400;
+}
+
+/* ── TOAST ── */
+#toast {
+  position: fixed; bottom: 28px; right: 28px;
+  padding: 13px 22px; border-radius: 12px;
+  font-size: 13px; font-weight: 500;
+  z-index: 100; transition: all 0.28s cubic-bezier(0.34,1.46,0.64,1);
+  pointer-events: none; opacity: 0; transform: translateY(20px) scale(0.96);
+  box-shadow: var(--shadow); max-width: 340px; line-height: 1.4;
+  backdrop-filter: blur(8px);
+}
+#toast.show { opacity: 1; transform: translateY(0) scale(1); }
+#toast.success {
+  background: rgba(52,211,153,0.08);
+  border: 1px solid rgba(52,211,153,0.35);
+  color: var(--green);
+}
+#toast.error {
+  background: rgba(248,113,113,0.07);
+  border: 1px solid rgba(248,113,113,0.3);
+  color: var(--red);
+}
+
+/* ── AVATAR ── */
+.avatar {
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; flex-shrink: 0;
+}
+
+/* ── LOADING SCREEN ── */
+#loading-screen {
+  position: fixed; inset: 0;
+  background: linear-gradient(155deg, #08111e 0%, #050c16 50%, #030810 100%);
+  z-index: 999; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 28px;
+}
+
+#loading-screen::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(201,165,92,0.5), transparent);
+  animation: shimmer 2.5s ease-in-out infinite;
+}
+
+#loading-screen::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(201,165,92,0.25), transparent);
+}
+
+@keyframes shimmer {
+  0%   { opacity: 0.2; }
+  50%  { opacity: 1; }
+  100% { opacity: 0.2; }
+}
+
+.loading-logo {
+  font-family: var(--font-display);
+  font-size: 44px; font-weight: 600;
+  color: var(--gold); letter-spacing: 5px;
+  text-shadow: 0 0 50px rgba(201,165,92,0.25);
+  animation: fadeUpIn 0.7s ease both;
+}
+
+.loading-sub {
+  font-size: 9px; letter-spacing: 5.5px; text-transform: uppercase;
+  color: rgba(201,165,92,0.28); margin-top: -22px;
+  animation: fadeUpIn 0.7s ease 0.12s both;
+}
+
+@keyframes fadeUpIn {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.spinner {
+  width: 34px; height: 34px;
+  border: 1.5px solid rgba(201,165,92,0.1);
+  border-top-color: var(--gold);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── COLOR SWATCHES ── */
+.swatch {
+  width: 36px; height: 36px; border-radius: 50%;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 2.5px solid transparent;
+}
+.swatch:hover { transform: scale(1.2) rotate(5deg); }
+
+/* ── PHOTO DROPZONE ── */
+#pf-photo-dropzone:hover {
+  border-color: var(--gold-border);
+  background: rgba(201,168,76,0.04);
+}
+
+/* ── GOOGLE DRIVE BUTTON ── */
+.gdrive-btn {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 16px; border-radius: 9px;
+  border: 1px solid var(--border); background: var(--surface2);
+  color: var(--text-muted); font-size: 13px; cursor: pointer;
+  transition: all 0.2s; font-weight: 500;
+}
+.gdrive-btn:hover { border-color: var(--gold-border); color: var(--gold); background: var(--gold-dim); }
+
+/* ── FILTER PILLS ── */
+.filter-pill {
+  padding: 5px 15px; border-radius: 20px;
+  border: 1px solid var(--border); background: transparent;
+  color: var(--text-dim); font-size: 12px; cursor: pointer;
+  font-family: var(--font-body); transition: all 0.18s; font-weight: 500;
+}
+.filter-pill:hover { border-color: var(--gold-border); color: var(--text-muted); }
+.filter-pill.active { border-color: var(--gold); background: var(--gold-dim); color: var(--gold); }
+
+/* ── CONFIG BANNER ── */
+#config-banner {
+  background: rgba(251,191,36,0.04);
+  border: 1px solid rgba(251,191,36,0.18);
+  color: #fcd34d; border-radius: var(--radius);
+  padding: 12px 18px; margin-bottom: 28px;
+  font-size: 13px; display: none;
+  backdrop-filter: blur(4px);
+}
+#config-banner.show { display: block; }
+
+/* ── DRIVE STATUS CHIP ── */
+.drive-status-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 12px; border-radius: 20px;
+  border: 1px solid var(--border); font-size: 11px;
+  color: var(--text-muted); background: var(--surface2);
+  font-weight: 500; white-space: nowrap;
+}
+.drive-status-chip.connected {
+  border-color: rgba(52,211,153,0.28); color: var(--green);
+  background: rgba(52,211,153,0.05);
+}
+.drive-status-chip.disconnected {
+  border-color: rgba(251,191,36,0.24); color: var(--amber);
+  background: rgba(251,191,36,0.04);
+}
+
+/* ── PROFILE CARDS ── */
+.profile-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 26px;
+  cursor: pointer; transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative; overflow: hidden;
+}
+
+.profile-card::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(201,165,92,0.2), transparent);
+  opacity: 0; transition: opacity 0.3s;
+}
+
+.profile-card::after {
+  content: '';
+  position: absolute; bottom: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, var(--gold), rgba(201,165,92,0.2), transparent);
+  transform: scaleX(0); transform-origin: left;
+  transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.profile-card:hover {
+  border-color: rgba(201,165,92,0.22);
+  transform: translateY(-4px);
+  box-shadow: var(--shadow), var(--glow-gold);
+}
+.profile-card:hover::before { opacity: 1; }
+.profile-card:hover::after { transform: scaleX(1); }
+
+/* ── EMPTY STATE ── */
+.empty-state { text-align: center; padding: 60px 20px; color: var(--text-dim); }
+.empty-state-icon { font-size: 44px; margin-bottom: 16px; opacity: 0.3; }
+
+/* ── ANIMATIONS ── */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.view:not(.hidden) { animation: fadeIn 0.28s ease; }
+
+/* ── RESPONSIVE ── */
+@media (max-width: 1100px) { .grid4 { grid-template-columns: repeat(2,1fr); } }
+@media (max-width: 768px) {
+  #sidebar { width: 100%; position: relative; }
+  #main { margin-left: 0; padding: 24px 20px; }
+  .grid2, .grid4 { grid-template-columns: 1fr; }
+  .page-hdr { flex-direction: column; gap: 14px; align-items: flex-start; }
+}
+.hidden { display: none !important; }
+
+/* ── DRIVE AUTH STATES ── */
+.drive-connected { opacity: 1 !important; pointer-events: all !important; filter: none !important; }
+.drive-auth-btn {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  width: 100%; padding: 13px; border-radius: var(--radius);
+  border: 1px dashed var(--gold-border); background: var(--gold-dim);
+  color: var(--gold); font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: all 0.2s;
+}
+.drive-auth-btn:hover { border-color: var(--gold); background: rgba(201,165,92,0.13); }
+.drive-auth-btn.connected {
+  border-style: solid; border-color: rgba(52,211,153,0.36);
+  background: rgba(52,211,153,0.05); color: var(--green); cursor: default;
+}
+.drive-auth-btn.connected:hover { background: rgba(52,211,153,0.08); }
+
+.drive-step-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 50%;
+  background: var(--surface); border: 1.5px solid var(--border);
+  color: var(--text-dim); font-size: 11px; font-weight: 700; flex-shrink: 0;
+}
+.drive-step-badge.active { background: var(--gold); border-color: var(--gold); color: var(--navy); }
+.drive-step-badge.done   { background: var(--green); border-color: var(--green); color: #fff; }
+
+/* ── STAT NUMBER & LABEL ── */
+.stat-number {
+  font-family: var(--font-display);
+  font-size: 46px;
+  font-weight: 600;
+  letter-spacing: -2px;
+  line-height: 1;
+  margin-bottom: 10px;
+}
+.stat-label {
+  font-size: 9.5px;
+  color: var(--text-dim);
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+/* ── PROFILE DETAIL CHIP ── */
+#cd-profile-chip {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+#cd-profile-chip:hover {
+  border-color: var(--gold-border) !important;
+  background: var(--surface3) !important;
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+/* ── CASE DETAIL TITLE ── */
+#cd-title {
+  font-family: var(--font-display) !important;
+  font-size: 24px !important;
+  letter-spacing: -0.3px;
+}
+
+/* ── SELECTION ── */
+::selection {
+  background: rgba(201,165,92,0.2);
+  color: var(--text);
+}
+
+/* ── FOCUS RING ── */
+:focus-visible {
+  outline: 2px solid var(--gold-border);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ── FILTER SELECT DROPDOWNS ── */
+.filter-select {
+  appearance: none; -webkit-appearance: none;
+  background-color: var(--surface2);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%236b82a0' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  font-weight: 500;
+  outline: none;
+  padding: 8px 30px 8px 12px;
+  transition: border-color 0.18s, color 0.18s, background-color 0.18s;
+  white-space: nowrap;
+}
+.filter-select:hover {
+  border-color: var(--gold-border);
+  color: var(--text);
+}
+.filter-select:focus {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px var(--gold-dim);
+  color: var(--text);
+}
+[data-theme="light"] .filter-select {
+  background-color: var(--surface2);
+}
