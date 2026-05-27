@@ -46,10 +46,37 @@ async function dbLoad() {
   if (localMode || !window._db) return;
   try {
     const db = window._db;
-    const pSnap = await window._fbGetDocs(window._fbQuery(window._fbCol(db,"profiles"), window._fbOrderBy("createdAt","desc")));
+    const currentUserUid = window._currentUser?.uid;
+    
+    if (!currentUserUid) {
+      console.warn("No current user UID available");
+      return;
+    }
+
+    // Load all registered profiles so they appear in the directory/dashboard
+    // NOTE: We intentionally do NOT filter by ownerUid here — all attorneys are visible to each other.
+    // The orderBy("createdAt") requires a Firestore index. If it fails, we fall back to unordered.
+    let pSnap;
+    try {
+      pSnap = await window._fbGetDocs(window._fbQuery(
+        window._fbCol(db,"profiles"),
+        window._fbOrderBy("createdAt","desc")
+      ));
+    } catch(indexErr) {
+      // Fallback: load without ordering if index doesn't exist yet
+      console.warn("profiles orderBy failed, loading without sort:", indexErr.message);
+      pSnap = await window._fbGetDocs(window._fbCol(db,"profiles"));
+    }
     profiles = pSnap.docs.map(d=>({id:d.id,...d.data()}));
-    const cSnap = await window._fbGetDocs(window._fbQuery(window._fbCol(db,"cases"), window._fbOrderBy("createdAt","desc")));
+    
+    // Load only cases belonging to the current user (keeps cases restricted and private)
+    const cSnap = await window._fbGetDocs(window._fbQuery(
+      window._fbCol(db,"cases"), 
+      window._fbWhere("ownerUid", "==", currentUserUid),
+      window._fbOrderBy("createdAt","desc")
+    ));
     cases = cSnap.docs.map(d=>({id:d.id,...d.data()}));
+    
     // Load shared case types list
     const ctSnap = await window._fbGetDocs(window._fbCol(db,"caseTypes"));
     caseTypesList = ctSnap.docs.map(d=>d.data().name).filter(Boolean).sort();
@@ -72,7 +99,11 @@ async function dbLoad() {
 }
 
 async function dbAddProfile(data) {
-  if (localMode || !window._db) { data.id = "local_"+Date.now(); profiles.unshift(data); return data; }
+  if (localMode || !window._db) { data.id = "local_"+Date.now(); data.ownerUid = window._currentUser?.uid; profiles.unshift(data); return data; }
+  // Add the current user's UID and a server timestamp so ordering works reliably
+  data.ownerUid = window._currentUser?.uid;
+  // Keep ISO string for display, add server timestamp for reliable ordering
+  data.createdAt = new Date().toISOString();
   const ref = await window._fbAddDoc(window._fbCol(window._db,"profiles"), data);
   data.id = ref.id;
   profiles.unshift(data);
@@ -91,7 +122,9 @@ async function dbDeleteProfile(id) {
 }
 
 async function dbAddCase(data) {
-  if (localMode || !window._db) { data.id = "local_"+Date.now(); cases.unshift(data); return data; }
+  if (localMode || !window._db) { data.id = "local_"+Date.now(); data.ownerUid = window._currentUser?.uid; cases.unshift(data); return data; }
+  // Add the current user's UID to the case
+  data.ownerUid = window._currentUser?.uid;
   const ref = await window._fbAddDoc(window._fbCol(window._db,"cases"), data);
   data.id = ref.id;
   cases.unshift(data);
