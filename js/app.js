@@ -1,8 +1,9 @@
 // ═══════════════════════════════════════════════════════════════
-//  DELETE CONFIRMATION — TYPE "DELETE" TO CONFIRM
+//  DELETE CONFIRMATION — TYPE VERIFICATION TO CONFIRM
 //  CRITICAL: Store target in a closure variable, NOT global deleteTarget
 // ═══════════════════════════════════════════════════════════════
 let _pendingDeleteTarget = null;
+let caseFormOrigin = "profileDetail"; // Router state to track form arrival
 
 function confirmDeleteProfile() {
   const cnt = cases.filter(c => c.profileId === selProfile.id).length;
@@ -12,15 +13,28 @@ function confirmDeleteProfile() {
   document.getElementById("del-body").innerHTML = 
     `You are about to permanently remove <strong style="color:var(--text)">${selProfile.name}</strong> and all ${cnt} associated case(s).<br>This action <strong>cannot</strong> be undone.`;
 
+  const label = document.getElementById("del-confirm-target-text");
+  label.textContent = "DELETE";
+  label.style.color = "var(--red)";
+
   openDeleteModal();
 }
 
 function confirmDeleteCase() {
-  _pendingDeleteTarget = { type: "case", id: selCase.id, title: selCase.title };
+  _pendingDeleteTarget = { 
+    type: "case", 
+    id: selCase.id, 
+    title: selCase.title,
+    calendarEventId: selCase.calendarEventId || null 
+  };
 
   document.getElementById("del-title").textContent = "Delete Case?";
   document.getElementById("del-body").innerHTML = 
     `You are about to permanently remove <strong style="color:var(--text)">${selCase.title}</strong>.<br>This action <strong>cannot</strong> be undone.`;
+
+  const label = document.getElementById("del-confirm-target-text");
+  label.textContent = "DELETE";
+  label.style.color = "var(--red)";
 
   openDeleteModal();
 }
@@ -31,20 +45,23 @@ function openDeleteModal() {
   const btn = document.getElementById("del-confirm-btn");
   const err = document.getElementById("del-input-err");
 
-  // Reset state
+  const targetText = document.getElementById("del-confirm-target-text").textContent.trim();
+
   input.value = "";
   btn.disabled = true;
   btn.style.opacity = "0.5";
   err.classList.add("hidden");
 
-  // Remove old listeners to prevent stacking
   const newBtn = btn.cloneNode(true);
   btn.parentNode.replaceChild(newBtn, btn);
 
-  // Input validation
   input.oninput = () => {
-    const val = input.value.trim().toUpperCase();
-    if (val === "DELETE") {
+    const val = input.value.trim();
+    const expected = targetText;
+    
+    const isMatched = expected.includes("@") ? (val === expected) : (val.toUpperCase() === "DELETE");
+
+    if (isMatched) {
       newBtn.disabled = false;
       newBtn.style.opacity = "1";
       err.classList.add("hidden");
@@ -60,7 +77,6 @@ function openDeleteModal() {
     }
   };
 
-  // Confirm button handler
   newBtn.onclick = () => executeDelete();
 
   modal.classList.remove("hidden");
@@ -74,30 +90,31 @@ function closeDeleteModal() {
 
 async function executeDelete() {
   const target = _pendingDeleteTarget;
-  if (!target) {
-    console.error("No pending delete target");
-    return;
-  }
+  if (!target) return;
 
   closeDeleteModal();
 
   try {
-    if (target.type === "case") {
+    if (target.type === "account_delete") {
+      await executeDeleteAccountWipe();
+    } else if (target.type === "case") {
+      if (target.calendarEventId && typeof deleteCalendarEvent === "function") {
+        await deleteCalendarEvent(target.calendarEventId);
+      }
       await dbDeleteCase(target.id);
-      // Remove from local array immediately for responsive UI
       cases = cases.filter(c => c.id !== target.id);
       selCase = null;
       showToast("Case deleted successfully", "error");
       showView("profileDetail");
       renderProfileDetail();
-
     } else if (target.type === "profile") {
-      // Delete all associated cases first
       const toDelete = cases.filter(c => c.profileId === target.id);
       for (const c of toDelete) {
+        if (c.calendarEventId && typeof deleteCalendarEvent === "function") {
+          await deleteCalendarEvent(c.calendarEventId).catch(() => {});
+        }
         await dbDeleteCase(c.id);
       }
-      // Remove from local arrays immediately
       cases = cases.filter(c => c.profileId !== target.id);
 
       await dbDeleteProfile(target.id);
@@ -105,17 +122,79 @@ async function executeDelete() {
 
       selProfile = null;
       selCase = null;
-      showToast(`Profile "${target.name}" and ${toDelete.length} case(s) deleted`, "error");
+      showToast(`Profile and associated cases deleted`, "error");
       navTo("profiles");
-      renderQuickAccess();
     }
 
-    // Refresh dashboard stats if visible
     if (currentView === "dashboard") renderDashboard();
-
   } catch (err) {
     console.error("executeDelete error:", err);
     showToast("Delete failed: " + (err.message || "Unknown error"), "error");
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  CASE SHARING SYSTEM
+// ═══════════════════════════════════════════════════════════════
+function openShareCaseModal() {
+  if (!selCase) return;
+  const listEl = document.getElementById("share-modal-list");
+  if (!listEl) return;
+
+  const sharedUids = selCase.sharedWith || [];
+  const currentUid = window._currentUser?.uid;
+
+  const associates = profiles.filter(p => p.ownerUid && p.ownerUid !== currentUid);
+
+  if (associates.length === 0) {
+    listEl.innerHTML = `<div style="text-align:center;color:var(--text-dim);font-size:13px;padding:12px">No other associate attorneys are currently registered in the system.</div>`;
+  } else {
+    listEl.innerHTML = associates.map(p => {
+      const isChecked = sharedUids.includes(p.ownerUid) ? "checked" : "";
+      return `
+        <label style="display:flex;align-items:center;gap:12px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 14px;cursor:pointer;margin:0;text-transform:none;letter-spacing:normal">
+          <input type="checkbox" name="share-associate-checkbox" value="${p.ownerUid}" ${isChecked} style="accent-color:var(--gold);width:16px;height:16px;margin:0"/>
+          ${avatarDiv(p.name, p.avatarColor, 28, p.photoUrl)}
+          <div style="flex:1">
+            <div style="font-size:13px;font-weight:600;color:var(--text)">${p.name}</div>
+            <div style="font-size:11px;color:var(--text-muted)">${p.email}</div>
+          </div>
+        </label>
+      `;
+    }).join("");
+  }
+
+  document.getElementById("share-modal").classList.remove("hidden");
+}
+
+function closeShareModal() {
+  document.getElementById("share-modal").classList.add("hidden");
+}
+
+async function saveShareSettings() {
+  if (!selCase) return;
+  const checkboxes = document.querySelectorAll('input[name="share-associate-checkbox"]');
+  const selectedUids = [];
+  checkboxes.forEach(cb => {
+    if (cb.checked) selectedUids.push(cb.value);
+  });
+
+  const ownerUid = selCase.ownerUid || window._currentUser.uid;
+  const allowedUids = [ownerUid, ...selectedUids];
+
+  try {
+    showToast("Updating share settings...");
+    await dbUpdateCase(selCase.id, {
+      sharedWith: selectedUids,
+      allowedUids: allowedUids
+    });
+    selCase.sharedWith = selectedUids;
+    selCase.allowedUids = allowedUids;
+    closeShareModal();
+    showToast("Case shared successfully!");
+  } catch (err) {
+    console.error("saveShareSettings error:", err);
+    showToast("Failed to share case: " + err.message, "error");
   }
 }
 
@@ -130,7 +209,6 @@ function openAddProfile() {
   pfDriveConnected = false;
   pfPhotoDataUrl = null;
 
-  // Reset form
   document.getElementById("pf-title").textContent="New Attorney Profile";
   document.getElementById("pf-name").value="";
   document.getElementById("pf-role").value="";
@@ -139,12 +217,8 @@ function openAddProfile() {
   document.getElementById("pf-cancel-btn").onclick=()=>navTo("profiles");
   document.getElementById("pf-back-btn").onclick=()=>navTo("profiles");
 
-  // Reset Drive auth UI
   resetDriveAuthUI();
-
-  // Disable details section until Drive is connected
   setDetailsEnabled(false);
-
   clearProfileErrors();
   resetPhotoUpload();
   updateAvatarPreview();
@@ -155,8 +229,8 @@ function openEditProfile() {
   const p=selProfile;
   profFormMode="edit";
   pfColor=p.avatarColor || AVATAR_COLORS[0];
-  pfPhotoDataUrl = p.photoUrl || null;  // use Drive URL for preview
-  pfDriveConnected = true; // Already has drive folder or can skip
+  pfPhotoDataUrl = p.photoUrl || null;
+  pfDriveConnected = true;
 
   document.getElementById("pf-title").textContent="Edit Profile";
   document.getElementById("pf-name").value=p.name;
@@ -166,7 +240,6 @@ function openEditProfile() {
   document.getElementById("pf-cancel-btn").onclick=()=>{ showView("profileDetail"); renderProfileDetail(); };
   document.getElementById("pf-back-btn").onclick=()=>{ showView("profileDetail"); renderProfileDetail(); };
 
-  // For edit, hide the drive auth requirement (already connected)
   const driveSection = document.getElementById("pf-drive-section");
   if (driveSection) driveSection.style.display = "none";
 
@@ -178,7 +251,6 @@ function openEditProfile() {
 
   clearProfileErrors();
   resetPhotoUpload();
-  // If they already have a photo, show it
   if (pfPhotoDataUrl) {
     showPhotoPreview(pfPhotoDataUrl);
   }
@@ -226,7 +298,6 @@ function setDetailsEnabled(enabled) {
   }
 }
 
-// ── DRIVE AUTH HANDLER ──
 async function connectDriveForProfile() {
   const btn = document.getElementById("pf-connect-drive-btn");
   const btnText = document.getElementById("pf-connect-drive-text");
@@ -237,15 +308,11 @@ async function connectDriveForProfile() {
   errorEl.classList.add("hidden");
 
   try {
-    // Wait up to 8s for GIS to initialize (handles slow loads & new Netlify domains)
     await waitForGoogleDriveReady();
-
     await promptDriveAuth();
 
-    // Success!
     pfDriveConnected = true;
 
-    // Update UI
     const statusEl = document.getElementById("pf-drive-status");
     statusEl.className = "drive-status-chip connected";
     statusEl.textContent = "● Connected";
@@ -253,10 +320,8 @@ async function connectDriveForProfile() {
     btn.classList.add("connected");
     btnText.textContent = "✓ Google Drive Connected";
 
-    // Enable details section
     setDetailsEnabled(true);
 
-    // Enable save button
     const saveBtn = document.getElementById("pf-save-btn");
     saveBtn.disabled = false;
     saveBtn.style.opacity = "1";
@@ -264,7 +329,6 @@ async function connectDriveForProfile() {
     document.getElementById("pf-save-btn-text").textContent = profFormMode === "add" ? "Create Profile" : "Save Changes";
 
     showToast("Google Drive connected successfully");
-
   } catch (err) {
     console.error("Drive auth failed:", err);
     btn.disabled = false;
@@ -275,7 +339,6 @@ async function connectDriveForProfile() {
   }
 }
 
-// ── PHOTO UPLOAD ──
 let pfPhotoDataUrl = null;
 
 function resetPhotoUpload() {
@@ -296,7 +359,7 @@ function showPhotoPreview(dataUrl) {
   const initialsWrap = document.getElementById("pf-photo-initials-wrap");
   const img = document.getElementById("pf-photo-preview-img");
   if (dropzone) dropzone.style.display = "none";
-  if (previewWrap) { previewWrap.style.display = "flex"; }
+  if (previewWrap) previewWrap.style.display = "flex";
   if (initialsWrap) initialsWrap.style.display = "none";
   if (img) img.src = dataUrl;
 }
@@ -328,7 +391,6 @@ function updateAvatarPreview() {
   const name=document.getElementById("pf-name")?.value||"Preview";
   const role=document.getElementById("pf-role")?.value||"Role";
 
-  // Update initials preview
   const av=document.getElementById("pf-avatar-preview");
   if (av) av.textContent=initials(name);
 
@@ -337,14 +399,12 @@ function updateAvatarPreview() {
   if (namePreviewInitials) namePreviewInitials.textContent=name==="Preview"?"Attorney Name":name;
   if (rolePreviewInitials) rolePreviewInitials.textContent=role==="Role"?"Role":role;
 
-  // Also update name/role in the photo preview if visible
   const namePreview = document.getElementById("pf-name-preview");
   const rolePreview = document.getElementById("pf-role-preview");
   if (namePreview) namePreview.textContent=name==="Preview"?"Attorney Name":name;
   if (rolePreview) rolePreview.textContent=role==="Role"?"Role":role;
 }
 
-// Bind input listeners (only once)
 function bindProfileInputs() {
   const nameInp = document.getElementById("pf-name");
   const roleInp = document.getElementById("pf-role");
@@ -370,7 +430,6 @@ function clearProfileErrors() {
 }
 
 async function saveProfile() {
-  // Validate Drive connection for new profiles
   if (profFormMode === "add" && !pfDriveConnected) {
     showToast("Please connect Google Drive before creating a profile", "error");
     return;
@@ -388,7 +447,7 @@ async function saveProfile() {
     contact: document.getElementById("pf-contact").value.trim(),
     email: document.getElementById("pf-email").value.trim(),
     avatarColor: pfColor,
-    photoDataUrl: null  // never store base64 in Firestore
+    photoDataUrl: null
   };
 
   try {
@@ -397,7 +456,6 @@ async function saveProfile() {
       const np = await dbAddProfile(data);
       selProfile = np;
 
-      // Auto-create Drive folder now that we're connected
       showToast("Creating Drive folder...");
       const folderId = await createDriveFolder(`Simando Law — ${np.name}`, DRIVE_FOLDER_ID || null);
       if (folderId) {
@@ -406,7 +464,6 @@ async function saveProfile() {
         showToast("Drive folder created!");
       }
 
-      // Upload profile photo to Drive if provided
       if (pfPhotoDataUrl && np.driveFolderId) {
         try {
           showToast("Uploading profile photo...");
@@ -417,7 +474,7 @@ async function saveProfile() {
           showToast("Profile photo saved!");
         } catch (photoErr) {
           console.error("Photo upload error:", photoErr);
-          showToast("Profile created, but photo upload failed: " + photoErr.message, "error");
+          showToast("Photo upload failed: " + photoErr.message, "error");
         }
       }
 
@@ -425,13 +482,10 @@ async function saveProfile() {
       renderProfiles();
       navTo("profiles");
     } else {
-      // Edit mode — handle photo changes
       if (pfPhotoDataUrl && pfPhotoDataUrl.startsWith("data:")) {
-        // New photo selected — upload it
         try {
           showToast("Uploading profile photo...");
           const folderId = selProfile.driveFolderId;
-          // Delete old photo from Drive if exists
           if (selProfile.photoFileId && hasValidToken()) {
             await deleteDriveFile(selProfile.photoFileId).catch(() => {});
           }
@@ -444,12 +498,10 @@ async function saveProfile() {
           showToast("Photo upload failed: " + photoErr.message, "error");
         }
       } else if (!pfPhotoDataUrl && selProfile.photoFileId) {
-        // Photo was removed
         if (hasValidToken()) await deleteDriveFile(selProfile.photoFileId).catch(() => {});
         data.photoFileId = null;
         data.photoUrl = null;
       } else {
-        // Photo unchanged — keep existing
         data.photoFileId = selProfile.photoFileId || null;
         data.photoUrl = selProfile.photoUrl || null;
       }
@@ -460,7 +512,6 @@ async function saveProfile() {
       showView("profileDetail");
       renderProfileDetail();
     }
-    renderQuickAccess();
   } catch (err) {
     console.error("saveProfile error:", err);
     showToast("Failed to save profile: " + (err.message || "Unknown error"), "error");
@@ -482,81 +533,8 @@ async function createProfileFolderManual() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// ── Category → Party labels ──
-function updatePartyLabels() {
-  const cat = (document.getElementById("cf-category")?.value || "").toLowerCase();
-  const labels = getPartyLabels(cat);
-  const ll = document.getElementById("cf-label-left");
-  const lr = document.getElementById("cf-label-right");
-  if (ll) ll.textContent = labels.left + "s";
-  if (lr) lr.textContent = labels.right + "s";
-  // Update error message
-  const errEl = document.getElementById("cf-parties-err");
-  if (errEl) errEl.textContent = `Add at least one ${labels.left} and one ${labels.right}`;
-  // Update placeholder text on inputs
-  const pi = document.getElementById("cf-petitioner-input");
-  const ri = document.getElementById("cf-respondent-input");
-  if (pi) pi.placeholder = labels.left + " name…";
-  if (ri) ri.placeholder = labels.right + " name…";
-}
-
-function onCategoryChange() {
-  updatePartyLabels();
-}
-
-// ── Case Type autocomplete ──
-let _caseTypeSuggestActive = -1;
-
-function onCaseTypeInput(input) {
-  const val = input.value.trim().toLowerCase();
-  const box = document.getElementById("cf-type-suggestions");
-  if (!val) { box.style.display="none"; return; }
-  const matches = caseTypesList.filter(t => t.toLowerCase().includes(val));
-  if (!matches.length) { box.style.display="none"; return; }
-  _caseTypeSuggestActive = -1;
-  box.innerHTML = matches.map((t,i) =>
-    `<div class="ct-suggestion" data-idx="${i}" data-val="${t}"
-      style="padding:10px 14px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border);transition:background 0.1s"
-      onmousedown="selectCaseTypeSuggestion('${t.replace(/'/g,"&#39;")}')"
-      onmouseover="this.style.background='var(--surface2)'"
-      onmouseout="this.style.background=''">${t}</div>`
-  ).join("");
-  box.style.display = "block";
-}
-
-function selectCaseTypeSuggestion(val) {
-  document.getElementById("cf-type-input").value = val;
-  document.getElementById("cf-type-suggestions").style.display = "none";
-}
-
-function hideCaseTypeSuggestions() {
-  setTimeout(()=>{ const b=document.getElementById("cf-type-suggestions"); if(b) b.style.display="none"; }, 150);
-}
-
-function onCaseTypeKeydown(e) {
-  const box = document.getElementById("cf-type-suggestions");
-  const items = box ? box.querySelectorAll(".ct-suggestion") : [];
-  if (!items.length || box.style.display==="none") return;
-  if (e.key === "ArrowDown") {
-    e.preventDefault();
-    _caseTypeSuggestActive = Math.min(_caseTypeSuggestActive+1, items.length-1);
-    items.forEach((el,i)=>{ el.style.background = i===_caseTypeSuggestActive ? "var(--surface2)" : ""; });
-  } else if (e.key === "ArrowUp") {
-    e.preventDefault();
-    _caseTypeSuggestActive = Math.max(_caseTypeSuggestActive-1, 0);
-    items.forEach((el,i)=>{ el.style.background = i===_caseTypeSuggestActive ? "var(--surface2)" : ""; });
-  } else if (e.key === "Enter" && _caseTypeSuggestActive >= 0) {
-    e.preventDefault();
-    selectCaseTypeSuggestion(items[_caseTypeSuggestActive].dataset.val);
-  } else if (e.key === "Escape") {
-    box.style.display = "none";
-  }
-}
-
 //  CASE FORM
 // ═══════════════════════════════════════════════════════════════
-
-// ── Party Builder state ──
 let cfPetitioners = [];
 let cfRespondents = [];
 
@@ -598,42 +576,28 @@ function renderPartyLists() {
 }
 
 function serializeParties() {
-  // Build the parties string using the current party labels
-  const cat = document.getElementById("cf-category")?.value || "";
-  const labels = getPartyLabels(cat.toLowerCase());
   const parts = [];
-  if (cfPetitioners.length) parts.push(labels.left + ": " + cfPetitioners.join(", "));
-  if (cfRespondents.length) parts.push(labels.right + ": " + cfRespondents.join(", "));
+  if (cfPetitioners.length) parts.push("Petitioner: " + cfPetitioners.join(", "));
+  if (cfRespondents.length) parts.push("Respondent: " + cfRespondents.join(", "));
   document.getElementById("cf-parties").value = parts.join(" | ");
 }
 
 function parsePartiesString(str) {
-  // Parse stored string back into arrays — handles all label variants
   cfPetitioners = [];
   cfRespondents = [];
   if (!str) return;
-  // Left-side labels: Petitioner, Plaintiff, Private Complainant
-  // Right-side labels: Respondent, Defendant, Accused
-  const leftLabels = ["petitioner", "plaintiff", "private complainant"];
-  const rightLabels = ["respondent", "defendant", "accused"];
   str.split("|").forEach(seg => {
     seg = seg.trim();
-    const lower = seg.toLowerCase();
-    const colonIdx = seg.indexOf(":");
-    if (colonIdx < 0) { cfRespondents = [seg]; return; }
-    const label = lower.slice(0, colonIdx).trim();
-    const names = seg.slice(colonIdx+1).split(",").map(s=>s.trim()).filter(Boolean);
-    if (leftLabels.some(l => label.startsWith(l))) {
-      cfPetitioners = names;
-    } else if (rightLabels.some(l => label.startsWith(l))) {
-      cfRespondents = names;
-    } else {
-      cfRespondents = names; // fallback
+    if (seg.toLowerCase().startsWith("petitioner:")) {
+      cfPetitioners = seg.slice(11).split(",").map(s=>s.trim()).filter(Boolean);
+    } else if (seg.toLowerCase().startsWith("respondent:")) {
+      cfRespondents = seg.slice(11).split(",").map(s=>s.trim()).filter(Boolean);
+    } else if (seg) {
+      cfRespondents = [seg];
     }
   });
 }
 
-// ── Venue helpers ──
 function onVenueChange(sel) {
   const manual = document.getElementById("cf-venue-manual");
   if (sel.value === "Other (specify)") {
@@ -663,39 +627,103 @@ function setVenueValue(val) {
     sel.value = match;
     manual.style.display = "none";
   } else if (val) {
-    // Value is a custom string — select "Other (specify)" and fill manual
     sel.value = "Other (specify)";
     manual.style.display = "block";
     manual.value = val;
   }
 }
 
-function populateCaseSelects() {
-  document.getElementById("cf-category").innerHTML=CASE_CATEGORIES.map(t=>`<option>${t}</option>`).join("");
-  document.getElementById("cf-status").innerHTML=STATUS_OPTIONS.map(t=>`<option>${t}</option>`).join("");
-  document.getElementById("cf-venue").innerHTML=VENUES.map(v=>`<option>${v}</option>`).join("");
-  updatePartyLabels();
+let _caseTypeSuggestions = [];
+
+async function loadCaseTypesForCategory(category) {
+  _caseTypeSuggestions = [];
+  if (!window._db || !category) return;
+  try {
+    const snap = await window._fbGetDocs(window._fbQuery(
+      window._fbCol(window._db, "caseTypes"),
+      window._fbWhere("category", "==", category)
+    ));
+    _caseTypeSuggestions = snap.docs.map(d => d.data().name).filter(Boolean);
+  } catch(e) { console.warn("loadCaseTypes error:", e); }
 }
 
-function openAddCase() {
-  if (!selProfile) return;
+async function saveCaseTypeIfNew(category, typeName) {
+  if (!typeName || !category || !window._db) return;
+  const name = typeName.trim();
+  if (!name || _caseTypeSuggestions.includes(name)) return;
+  try {
+    await window._fbAddDoc(window._fbCol(window._db, "caseTypes"), { category, name, createdAt: new Date().toISOString() });
+    _caseTypeSuggestions.push(name);
+  } catch(e) { console.warn("saveCaseType error:", e); }
+}
+
+function filterCaseTypeSuggestions(val) {
+  const dd = document.getElementById("cf-type-dropdown");
+  const q = val.trim().toLowerCase();
+  const filtered = q ? _caseTypeSuggestions.filter(s => s.toLowerCase().includes(q)) : _caseTypeSuggestions;
+  if (!filtered.length) { dd.style.display = "none"; return; }
+  dd.innerHTML = filtered.map(s =>
+    `<div onclick="selectCaseType('${s.replace(/'/g,"\'")}')" style="padding:9px 14px;cursor:pointer;font-size:13px;color:var(--text);transition:background 0.1s" onmouseover="this.style.background='rgba(201,165,92,0.08)'" onmouseout="this.style.background=''">${s}</div>`
+  ).join("");
+  dd.style.display = "block";
+}
+
+// ── FIXED: populateCaseSelects restored safely to avoid reference crashes on form open ──
+function populateCaseSelects() {
+  const catSel = document.getElementById("cf-category");
+  const statusSel = document.getElementById("cf-status");
+  const venueSel = document.getElementById("cf-venue");
+  
+  if (catSel) catSel.innerHTML = CASE_CATEGORIES.map(c => `<option value="${c}">${c}</option>`).join("");
+  if (statusSel) statusSel.innerHTML = STATUS_OPTIONS.map(t => `<option value="${t}">${t}</option>`).join("");
+  if (venueSel) venueSel.innerHTML = VENUES.map(v => `<option value="${v}">${v}</option>`).join("");
+}
+
+// ── FIXED: openAddCase now forces profile mapping safely even if launched from "All Cases" ──
+async function openAddCase() {
+  caseFormOrigin = currentView;
+  
+  const u = window._currentUser;
+  if (!u) return;
+
+  const myProf = profiles.find(p => p.ownerUid === u.uid || (p.email && p.email.toLowerCase() === u.email.toLowerCase()));
+  if (!myProf) {
+    showToast("Your attorney profile is still loading. Please wait a moment.", "error");
+    return;
+  }
+
+  // Explicitly reset save button state on form load to prevent lock-outs
+  const saveBtn = document.getElementById("cf-save-btn");
+  if (saveBtn) {
+    saveBtn.disabled = false;
+    saveBtn.textContent = "Add Case";
+  }
+
+  selProfile = myProf;
   caseFormMode="add";
   pendingDocs=[];
   cfPetitioners = selProfile.name ? [selProfile.name] : [];
   cfRespondents = [];
-  populateCaseSelects();
+  populateCaseSelects(); // Call restored cleanly
   document.getElementById("cf-title").textContent="New Case";
   document.getElementById("cf-save-btn").textContent="Add Case";
   document.getElementById("cf-case-title").value="";
   document.getElementById("cf-narrative").value="";
+  document.getElementById("cf-filed").value="";
   document.getElementById("cf-due").value="";
-  document.getElementById("cf-category").value=CASE_CATEGORIES[0];
+  document.getElementById("cf-case-number").value="";
+  document.getElementById("cf-doc-type").value="";
   document.getElementById("cf-type-input").value="";
   document.getElementById("cf-status").value=STATUS_OPTIONS[0];
   setVenueValue(VENUES[0]);
   document.getElementById("drive-status").textContent="";
-  document.getElementById("cf-back-btn").onclick=()=>{ showView("profileDetail"); renderProfileDetail(); };
-  document.getElementById("cf-cancel-btn").onclick=()=>{ showView("profileDetail"); renderProfileDetail(); };
+  
+  document.getElementById("cf-back-btn").onclick=()=>{ navTo(caseFormOrigin); };
+  document.getElementById("cf-cancel-btn").onclick=()=>{ navTo(caseFormOrigin); };
+  
+  const firstCat = CASE_CATEGORIES[0];
+  document.getElementById("cf-category").value = firstCat;
+  await onCategoryChange(firstCat);
   renderPartyLists();
   serializeParties();
   renderPendingDocs();
@@ -705,22 +733,35 @@ function openAddCase() {
   showView("caseForm");
 }
 
-function openEditCase() {
+async function openEditCase() {
   const c=selCase;
   caseFormMode="edit";
   pendingDocs=[...(c.documents||[])];
   parsePartiesString(c.parties);
-  populateCaseSelects();
+  populateCaseSelects(); // Call restored cleanly
+
+  // Explicitly reset save button state on form load to prevent lock-outs
+  const saveBtn = document.getElementById("cf-save-btn");
+  if (saveBtn) {
+    saveBtn.disabled = false;
+    saveBtn.textContent = "Save Changes";
+  }
+
   document.getElementById("cf-title").textContent="Edit Case";
   document.getElementById("cf-save-btn").textContent="Save Changes";
   document.getElementById("cf-case-title").value=c.title;
   document.getElementById("cf-narrative").value=c.narrative;
-  document.getElementById("cf-due").value=c.dueDate;
-  document.getElementById("cf-category").value=c.category||CASE_CATEGORIES[0];
-  document.getElementById("cf-type-input").value=c.caseType||c.type||"";
-  document.getElementById("cf-status").value=c.status;
-  updatePartyLabels(); // refresh labels after category is set
+  document.getElementById("cf-filed").value=c.filedDate || "";
+  document.getElementById("cf-due").value=c.dueDate || "";
+  document.getElementById("cf-case-number").value=c.caseNumber||"";
+  document.getElementById("cf-doc-type").value=c.docType||"";
   setVenueValue(c.venue);
+  
+  const cat = c.category || CASE_CATEGORIES[0];
+  document.getElementById("cf-category").value = cat;
+  await onCategoryChange(cat);
+  document.getElementById("cf-type-input").value = c.type||"";
+  
   document.getElementById("drive-status").textContent=pendingDocs.length?`${pendingDocs.length} file(s)`:"";
   document.getElementById("cf-back-btn").onclick=()=>{ showView("caseDetail"); renderCaseDetail(); };
   document.getElementById("cf-cancel-btn").onclick=()=>{ showView("caseDetail"); renderCaseDetail(); };
@@ -741,75 +782,6 @@ function updateCfChip() {
   } else chip.style.display="none";
 }
 
-function clearCaseErrors() {
-  ["cf-title-err","cf-due-err","cf-parties-err","cf-narrative-err"].forEach(id=>{document.getElementById(id).classList.add("hidden");});
-  ["cf-case-title","cf-due","cf-narrative"].forEach(id=>{document.getElementById(id).classList.remove("err");});
-}
-
-async function saveCase() {
-  serializeParties(); // make sure hidden field is current
-  const title=document.getElementById("cf-case-title").value.trim();
-  const due=document.getElementById("cf-due").value;
-  const parties=document.getElementById("cf-parties").value.trim();
-  const narrative=document.getElementById("cf-narrative").value.trim();
-  let valid=true;
-  if(!title){document.getElementById("cf-title-err").classList.remove("hidden");document.getElementById("cf-case-title").classList.add("err");valid=false;}
-  if(!due){document.getElementById("cf-due-err").classList.remove("hidden");document.getElementById("cf-due").classList.add("err");valid=false;}
-  if(cfPetitioners.length===0||cfRespondents.length===0){document.getElementById("cf-parties-err").classList.remove("hidden");valid=false;}
-  if(!narrative){document.getElementById("cf-narrative-err").classList.remove("hidden");document.getElementById("cf-narrative").classList.add("err");valid=false;}
-  if(!valid) return;
-
-  const data={
-    title,dueDate:due,parties,narrative,
-    category:document.getElementById("cf-category").value,
-    caseType:document.getElementById("cf-type-input").value.trim(),
-    type:document.getElementById("cf-category").value, // keep legacy field in sync for Drive folder logic
-    status:document.getElementById("cf-status").value,
-    venue:getVenueValue(),
-    documents:pendingDocs,
-  };
-  // Persist new case type to system-wide list
-  const ct = document.getElementById("cf-type-input").value.trim();
-  if (ct) dbAddCaseType(ct);
-  try {
-    // Sync any locally-staged files to Drive under the correct case-type folder
-    const caseType = data.category;
-    const profileFolderId = selProfile?.driveFolderId || null;
-    const hadLocalFiles = pendingDocs.some(d => d._localTempId);
-    if (typeof syncPendingFilesToDrive === "function") {
-      const syncedDocs = await syncPendingFilesToDrive(caseType, profileFolderId);
-      data.documents = syncedDocs.map(d => {
-        const clean = {...d};
-        delete clean._localTempId; // don't persist temp markers
-        return clean;
-      });
-      // Warn if files couldn't be uploaded to Drive (token expired)
-      const stillLocal = data.documents.some(d => !d.driveFileId && d.name);
-      if (hadLocalFiles && stillLocal) {
-        showToast("Case saved — Drive session expired. Re-connect Drive to upload files.", "error");
-      }
-    }
-    if(caseFormMode==="add"){
-      data.profileId=selProfile.id;
-      data.createdAt=new Date().toISOString().slice(0,10);
-      await dbAddCase(data);
-      showToast("Case added!");
-      showView("profileDetail");
-      renderProfileDetail();
-    } else {
-      await dbUpdateCase(selCase.id,data);
-      selCase={...selCase,...data};
-      showToast("Case updated!");
-      showView("caseDetail");
-      renderCaseDetail();
-    }
-    pendingDocs=[];
-  } catch (err) {
-    console.error("saveCase error:", err);
-    showToast("Failed to save case: " + (err.message || "Unknown error"), "error");
-  }
-}
-
 // ═══════════════════════════════════════════════════════════════
 //  BOOT
 // ═══════════════════════════════════════════════════════════════
@@ -828,6 +800,7 @@ function initAppUI() {
   if (loader) loader.style.display = "none";
   initTheme();
   bindProfileInputs();
+  initPasswordStrengthChecker(); // Triggered to bind password logic dynamically
   showView("dashboard");
   renderDashboard();
 }
@@ -837,6 +810,12 @@ async function connectDatabase() {
     localMode = false;
     const banner = document.getElementById("config-banner");
     if (banner) banner.classList.remove("show");
+
+    if (!window._currentUser) {
+      window.location.replace("login.html");
+      return;
+    }
+
     try {
       await dbLoad();
     } catch (err) {
@@ -875,3 +854,111 @@ setTimeout(() => {
     enterLocalMode("Firebase failed to load. Check your config and network.");
   }
 }, 6000);
+
+function clearCaseErrors() {
+  ["cf-title-err","cf-filed-err","cf-parties-err","cf-narrative-err"].forEach(id=>{document.getElementById(id).classList.add("hidden");});
+  ["cf-case-title","cf-filed","cf-narrative"].forEach(id=>{document.getElementById(id).classList.remove("err");});
+}
+
+async function saveCase() {
+  serializeParties();
+  const title=document.getElementById("cf-case-title").value.trim();
+  const filed=document.getElementById("cf-filed").value; // Required Filed Date
+  const due=document.getElementById("cf-due").value;     // Optional Due Date
+  const parties=document.getElementById("cf-parties").value.trim();
+  const narrative=document.getElementById("cf-narrative").value.trim();
+  
+  let valid=true;
+  if(!title){document.getElementById("cf-title-err").classList.remove("hidden");document.getElementById("cf-case-title").classList.add("err");valid=false;}
+  if(!filed){document.getElementById("cf-filed-err").classList.remove("hidden");document.getElementById("cf-filed").classList.add("err");valid=false;}
+  if(cfPetitioners.length===0||cfRespondents.length===0){document.getElementById("cf-parties-err").classList.remove("hidden");valid=false;}
+  if(!narrative){document.getElementById("cf-narrative-err").classList.remove("hidden");document.getElementById("cf-narrative").classList.add("err");valid=false;}
+  if(!valid) return;
+
+  // Prevent double clicks & multiple submissions during network request
+  const saveBtn = document.getElementById("cf-save-btn");
+  if (saveBtn) {
+    if (saveBtn.disabled) return;
+    saveBtn.disabled = true;
+    saveBtn.textContent = "Saving...";
+  }
+
+  const category = document.getElementById("cf-category").value;
+  const caseType = document.getElementById("cf-type-input").value.trim();
+  if (caseType) await saveCaseTypeIfNew(category, caseType);
+  const data={
+    title,
+    filedDate: filed,
+    dueDate: due || null, // Saved to Firestore, explicitly null if omitted
+    parties,narrative,
+    category,
+    type: caseType,
+    caseNumber: document.getElementById("cf-case-number").value.trim(),
+    docType: document.getElementById("cf-doc-type").value.trim(),
+    status:document.getElementById("cf-status").value,
+    venue:getVenueValue(),
+    documents:pendingDocs,
+  };
+  try {
+    const caseCategory = data.category || "Other";
+    const caseType = data.type || "Other";
+    const caseTitle = data.title || "Untitled";
+    const profileFolderId = selProfile?.driveFolderId || null;
+    const hadLocalFiles = pendingDocs.some(d => d._localTempId);
+    if (typeof syncPendingFilesToDrive === "function") {
+      const syncedDocs = await syncPendingFilesToDrive(caseCategory, caseType, caseTitle, profileFolderId);
+      data.documents = syncedDocs.map(d => {
+        const clean = {...d};
+        delete clean._localTempId;
+        return clean;
+      });
+      const stillLocal = data.documents.some(d => !d.driveFileId && d.name);
+      if (hadLocalFiles && stillLocal) {
+        showToast("Case saved locally — Drive session expired.", "error");
+      }
+    }
+
+    if (hasValidToken() && typeof createOrUpdateCalendarEvent === "function") {
+      showToast("Syncing with Google Calendar...");
+      if (caseFormMode === "edit" && selCase?.calendarEventId) {
+        data.calendarEventId = selCase.calendarEventId;
+      }
+      const eventId = await createOrUpdateCalendarEvent(data);
+      if (eventId) {
+        data.calendarEventId = eventId;
+      }
+    }
+
+    if(caseFormMode==="add"){
+      data.profileId=selProfile.id;
+      data.createdAt=new Date().toISOString().slice(0,10);
+      data.ownerUid = window._currentUser.uid;
+      data.sharedWith = [];
+      data.allowedUids = [window._currentUser.uid];
+      await dbAddCase(data);
+      showToast("Case added!");
+      showView(caseFormOrigin);
+      if (caseFormOrigin === "profileDetail") renderProfileDetail();
+    } else {
+      if (selCase) {
+        data.ownerUid = selCase.ownerUid || window._currentUser.uid;
+        data.sharedWith = selCase.sharedWith || [];
+        data.allowedUids = selCase.allowedUids || [data.ownerUid];
+      }
+      await dbUpdateCase(selCase.id,data);
+      selCase={...selCase,...data};
+      showToast("Case updated!");
+      showView("caseDetail");
+      renderCaseDetail();
+    }
+    pendingDocs=[];
+  } catch (err) {
+    console.error("saveCase error:", err);
+    showToast("Failed to save case: " + (err.message || "Unknown error"), "error");
+    // Restore save button state on failure
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = caseFormMode === "add" ? "Add Case" : "Save Changes";
+    }
+  }
+}
